@@ -196,11 +196,10 @@ function printWithPrintAssist(serialNumber, modelNumber, purchasePrice, batteryC
         console.log('日時:', dateString);
         console.log('QRコード番号:', qrcodeNumber);
         
-        // ePOS-Print XML生成
+        // ePOS-Print XML生成（日本語対応）
         let xml = '<?xml version="1.0" encoding="utf-8"?>';
         xml += '<epos-print xmlns="http://www.epson-pos.com/schemas/2011/03/epos-print">';
-        xml += '<text lang="ja"/>'; // 日本語設定
-        xml += '<text font="font_a"/>'; // Font A（日本語対応）
+        xml += '<text lang="ja"/>'; // 日本語設定を追加
         xml += '<text align="center"/>';
         xml += '<text width="2" height="1" em="true"/>';
         xml += `<text>T&apos;s time     ${serialNumber.padStart(5, '0')}&#10;</text>`;
@@ -433,9 +432,10 @@ function executePrint(eposDevice, serialNumber, modelNumber, purchasePrice, batt
                 const dateString = `${now.getFullYear()}年${(now.getMonth()+1).toString().padStart(2,'0')}月${now.getDate().toString().padStart(2,'0')}日 ${now.getHours().toString().padStart(2,'0')}:${now.getMinutes().toString().padStart(2,'0')} ${now.getSeconds().toString().padStart(2,'0')}秒`;
                 const barcodeNumber = `${now.getFullYear()}${(now.getMonth()+1).toString().padStart(2,'0')}${now.getDate().toString().padStart(2,'0')}${serialNumber.padStart(5, '0')}`;
                 
+                // 日本語設定を追加
+                printerObj.addTextLang(printerObj.LANG_JA);
+                
                 // 印刷データ作成
-                printerObj.addTextLang('ja'); // 日本語設定
-                printerObj.addTextFont(printerObj.FONT_A); // Font A（日本語対応）
                 printerObj.addTextAlign(printerObj.ALIGN_CENTER);
                 
                 // ヘッダー行
@@ -474,8 +474,9 @@ function executePrint(eposDevice, serialNumber, modelNumber, purchasePrice, batt
                 printerObj.addTextStyle(false, false, false, printerObj.COLOR_1);
                 printerObj.addText(`${dateString}\n\n`);
                 
-                // バーコード
-                printerObj.addBarcode(barcodeNumber, printerObj.BARCODE_CODE39, printerObj.HRI_BELOW, printerObj.FONT_A, 2, 60);
+                // QRコード（バーコードの代わり）
+                printerObj.addSymbol(barcodeNumber, printerObj.SYMBOL_QRCODE_MODEL_2, printerObj.LEVEL_H, 5, 0, 0);
+                printerObj.addText(`\n${barcodeNumber}\n`);
                 
                 printerObj.addFeedLine(2);
                 printerObj.addCut(printerObj.CUT_FEED);
