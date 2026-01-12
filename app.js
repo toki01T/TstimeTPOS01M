@@ -177,51 +177,41 @@ function printWithPrintAssist(serialNumber, modelNumber, purchasePrice, batteryC
     console.log('=== PrintAssist印刷開始 ===');
     console.log('入力データ:', {serialNumber, modelNumber, purchasePrice, batteryCost, beltCost, desiredPrice});
     
-    // PrintAssistアプリの確認を促す
-    if (confirm('PrintAssistアプリで印刷します。\n\nPrintAssistがインストールされていますか？\n\n「OK」= インストール済み（印刷実行）\n「キャンセル」= 未インストール（App Storeへ移動）')) {
-        console.log('PrintAssist印刷を実行します');
-    } else {
-        // App Storeへ移動
-        window.location.href = 'https://apps.apple.com/jp/app/epson-tm-print-assistant/id1025534382';
-        showMessage('App StoreからPrintAssistをインストールしてください', 'error');
-        return;
-    }
-    
     try {
         // 日時生成
         const now = new Date();
-        const dateString = `${now.getFullYear()}年${(now.getMonth()+1).toString().padStart(2,'0')}月${now.getDate().toString().padStart(2,'0')}日 ${now.getHours().toString().padStart(2,'0')}:${now.getMinutes().toString().padStart(2,'0')} ${now.getSeconds().toString().padStart(2,'0')}秒`;
+        const dateString = `${now.getFullYear()}年${(now.getMonth()+1).toString().padStart(2,'0')}月${now.getDate().toString().padStart(2,'0')}日 ${now.getHours().toString().padStart(2,'0')}:${now.getMinutes().toString().padStart(2,'0')}:${now.getSeconds().toString().padStart(2,'0')}`;
         const qrcodeNumber = `${now.getFullYear()}${(now.getMonth()+1).toString().padStart(2,'0')}${now.getDate().toString().padStart(2,'0')}${serialNumber.padStart(5, '0')}`;
         
         console.log('日時:', dateString);
         console.log('QRコード番号:', qrcodeNumber);
         
-        // ePOS-Print XML生成
+        // ePOS-Print XML生成（シンプル版）
         let xml = '<?xml version="1.0" encoding="utf-8"?>';
         xml += '<epos-print xmlns="http://www.epson-pos.com/schemas/2011/03/epos-print">';
         xml += '<text align="center"/>';
-        xml += '<text width="2" height="1" em="true"/>';
-        xml += `<text>T&apos;s time     ${serialNumber.padStart(5, '0')}&#10;</text>`;
-        xml += '<text>--------------------------------&#10;</text>';
-        xml += '<text width="1" height="1" em="false"/>';
-        xml += `<text>${escapeXml(modelNumber)}&#10;&#10;</text>`;
-        xml += `<text>購入価格　¥${Number(purchasePrice).toLocaleString()}-&#10;</text>`;
+        xml += '<text width="2" height="1"/>';
+        xml += `<text>T's time     ${serialNumber.padStart(5, '0')}\n</text>`;
+        xml += '<text>--------------------------------\n</text>';
+        xml += '<text width="1" height="1"/>';
+        xml += `<text>${modelNumber}\n\n</text>`;
+        xml += `<text>購入価格　¥${Number(purchasePrice).toLocaleString()}-\n</text>`;
         
         if (batteryCost) {
-            xml += `<text>電池代　¥${Number(batteryCost).toLocaleString()}-&#10;</text>`;
+            xml += `<text>電池代　¥${Number(batteryCost).toLocaleString()}-\n</text>`;
         }
         
         if (beltCost) {
-            xml += `<text>ベルト代　¥${Number(beltCost).toLocaleString()}-&#10;</text>`;
+            xml += `<text>ベルト代　¥${Number(beltCost).toLocaleString()}-\n</text>`;
         }
         
-        xml += '<text>&#10;</text>';
-        xml += '<text width="2" height="2" em="true"/>';
-        xml += `<text>希望金額　¥${Number(desiredPrice).toLocaleString()}-&#10;&#10;</text>`;
-        xml += '<text width="1" height="1" em="false"/>';
-        xml += `<text>${escapeXml(dateString)}&#10;&#10;</text>`;
-        xml += `<symbol type="qrcode_model_2" level="h" width="5" height="0" size="0">${qrcodeNumber}</symbol>`;
-        xml += `<text>&#10;${qrcodeNumber}&#10;</text>`;
+        xml += '<text>\n</text>';
+        xml += '<text width="2" height="2"/>';
+        xml += `<text>希望金額　¥${Number(desiredPrice).toLocaleString()}-\n\n</text>`;
+        xml += '<text width="1" height="1"/>';
+        xml += `<text>${dateString}\n\n</text>`;
+        xml += `<symbol type="qrcode_model_2" level="default" width="5" height="0" size="0">${qrcodeNumber}</symbol>`;
+        xml += `<text>\n${qrcodeNumber}\n</text>`;
         xml += '<feed line="2"/>';
         xml += '<cut type="feed"/>';
         xml += '</epos-print>';
@@ -229,59 +219,51 @@ function printWithPrintAssist(serialNumber, modelNumber, purchasePrice, batteryC
         console.log('生成されたXML:');
         console.log(xml);
         
-        // UTF-8エンコード → Base64エンコード（PrintAssist公式方法）
-        // 日本語を含むXMLを正しくエンコード
-        const utf8Bytes = new TextEncoder().encode(xml);
-        let binaryString = '';
-        for (let i = 0; i < utf8Bytes.length; i++) {
-            binaryString += String.fromCharCode(utf8Bytes[i]);
+        // Base64エンコード（正しい方法）
+        // 方法1: UTF-8バイト列をBase64に変換
+        function stringToBase64(str) {
+            // UTF-8エンコード
+            const utf8 = unescape(encodeURIComponent(str));
+            // Base64エンコード
+            return btoa(utf8);
         }
-        const base64XML = btoa(binaryString);
+        
+        const base64XML = stringToBase64(xml);
         
         console.log('Base64エンコード完了');
         console.log('Base64文字数:', base64XML.length);
         console.log('Base64データ（最初の100文字）:', base64XML.substring(0, 100));
         
-        // URLスキーム生成（PrintAssist公式フォーマット）
-        // 注意：Base64データはそのまま渡す（encodeURIComponent不要）
-        const printURL = `epos-print://print?devid=local_printer&timeout=10000&printdata=${base64XML}`;
+        // URLスキーム生成（エプソン公式フォーマット）
+        // 重要: printdataの値はURLエンコードする
+        const printURL = `epos-print://print?devid=local_printer&timeout=10000&printdata=${encodeURIComponent(base64XML)}`;
         console.log('完全なURLスキーム長:', printURL.length);
-        console.log('URLスキーム（最初の200文字）:', printURL.substring(0, 200));
+        console.log('完全なURL:', printURL);
         
-        // デバッグ用：ユーザーに表示
-        showMessage(`印刷データを生成しました（${base64XML.length}文字）。PrintAssistを起動します...`, 'success');
+        showMessage('PrintAssistアプリを起動します...', 'success');
         
-        // 少し待ってからURLスキームを開く
+        // URLスキームで起動
         setTimeout(function() {
-            console.log('URLスキームを開きます...');
-            
-            // iOS/iPadで確実に動作する方法
-            const link = document.createElement('a');
-            link.href = printURL;
-            link.style.display = 'none';
-            document.body.appendChild(link);
-            link.click();
-            document.body.removeChild(link);
-            console.log('URLスキーム起動完了');
-            
-            showMessage('PrintAssistアプリに印刷データを送信しました', 'success');
+            console.log('PrintAssistを起動します...');
+            window.location.href = printURL;
+            console.log('起動完了');
         }, 500);
-        
-        console.log('=== PrintAssist起動処理完了 ===');
         
         // 連番を自動的に1増やす
         setTimeout(function() {
             document.getElementById('serialNumber').value = parseInt(serialNumber) + 1;
             updatePreview();
-            showMessage('印刷データを送信しました。PrintAssistアプリで確認してください。', 'success');
+            showMessage('PrintAssistにデータを送信しました', 'success');
         }, 2000);
+        
+        console.log('=== PrintAssist起動処理完了 ===');
         
     } catch (error) {
         console.error('=== PrintAssist印刷エラー ===');
         console.error('エラー詳細:', error);
         console.error('エラーメッセージ:', error.message);
         console.error('エラースタック:', error.stack);
-        showMessage('印刷エラー: ' + error.message + ' (コンソールで詳細を確認してください)', 'error');
+        showMessage('印刷エラー: ' + error.message, 'error');
     }
 }
 
