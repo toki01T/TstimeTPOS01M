@@ -108,9 +108,7 @@ function printLabel() {
     const batteryCost = document.getElementById('batteryCost').value;
     const beltCost = document.getElementById('beltCost').value;
     const desiredPrice = document.getElementById('desiredPrice').value;
-    const connectionType = document.getElementById('connectionType').value;
-    const printerBT = document.getElementById('printerBT').value;
-    const printerIP = document.getElementById('printerIP').value;
+    const printerIP = document.getElementById('printerIP') ? document.getElementById('printerIP').value : '';
     
     // 入力チェック
     if (!modelNumber || !purchasePrice || !desiredPrice) {
@@ -118,30 +116,137 @@ function printLabel() {
         return;
     }
     
-    // 接続方法に応じたチェック
-    if (connectionType === 'bluetooth' && !printerBT) {
-        showMessage('Bluetoothアドレスを入力してください', 'error');
-        return;
-    }
-    
-    if (connectionType === 'network' && !printerIP) {
-        showMessage('プリンターIPアドレスを入力してください', 'error');
-        return;
-    }
-    
-    // ePOS-Print SDKの確認
-    if (typeof epson === 'undefined') {
-        showMessage('ePOS-Print SDKが読み込まれていません。epos-2.27.0.jsが正しく配置されているか確認してください。', 'error');
-        console.error('epsonオブジェクトが見つかりません');
-        return;
-    }
-    
-    // 接続方法に応じて印刷
-    if (connectionType === 'bluetooth') {
-        printViaBluetooth(serialNumber, modelNumber, purchasePrice, batteryCost, beltCost, desiredPrice, printerBT);
+    // デバイスに応じた印刷処理
+    if (isMobileDevice()) {
+        // iPad/iPhone: PrintAssist経由
+        printWithPrintAssist(serialNumber, modelNumber, purchasePrice, batteryCost, beltCost, desiredPrice);
     } else {
-        printViaNetwork(serialNumber, modelNumber, purchasePrice, batteryCost, beltCost, desiredPrice, printerIP);
+        // PC: ePOS-Print SDK
+        const connectionType = document.getElementById('connectionType').value;
+        const printerBT = document.getElementById('printerBT').value;
+        
+        // 接続方法に応じたチェック
+        if (connectionType === 'bluetooth' && !printerBT) {
+            showMessage('Bluetoothアドレスを入力してください', 'error');
+            return;
+        }
+        
+        if (connectionType === 'network' && !printerIP) {
+            showMessage('プリンターIPアドレスを入力してください', 'error');
+            return;
+        }
+        
+        // ePOS-Print SDKの確認
+        if (typeof epson === 'undefined') {
+            showMessage('ePOS-Print SDKが読み込まれていません。epos-2.27.0.jsが正しく配置されているか確認してください。', 'error');
+            console.error('epsonオブジェクトが見つかりません');
+            return;
+        }
+        
+        // 接続方法に応じて印刷
+        if (connectionType === 'bluetooth') {
+            printViaBluetooth(serialNumber, modelNumber, purchasePrice, batteryCost, beltCost, desiredPrice, printerBT);
+        } else {
+            printViaNetwork(serialNumber, modelNumber, purchasePrice, batteryCost, beltCost, desiredPrice, printerIP);
+        }
     }
+}
+
+// PrintAssist印刷（iPad/iPhone）
+function printWithPrintAssist(serialNumber, modelNumber, purchasePrice, batteryCost, beltCost, desiredPrice) {
+    console.log('PrintAssist印刷を開始します');
+    showMessage('PrintAssistで印刷を開始します...', 'success');
+    
+    try {
+        // 日時生成
+        const now = new Date();
+        const dateString = `${now.getFullYear()}年${(now.getMonth()+1).toString().padStart(2,'0')}月${now.getDate().toString().padStart(2,'0')}日 ${now.getHours().toString().padStart(2,'0')}:${now.getMinutes().toString().padStart(2,'0')} ${now.getSeconds().toString().padStart(2,'0')}秒`;
+        const qrcodeNumber = `${now.getFullYear()}${(now.getMonth()+1).toString().padStart(2,'0')}${now.getDate().toString().padStart(2,'0')}${serialNumber.padStart(5, '0')}`;
+        
+        // ePOS-Print XML生成
+        let xml = '<?xml version="1.0" encoding="utf-8"?>';
+        xml += '<epos-print xmlns="http://www.epson-pos.com/schemas/2011/03/epos-print">';
+        
+        // 中央揃え
+        xml += '<text align="center"/>';
+        
+        // ヘッダー
+        xml += '<text width="2" height="1" em="true"/>';
+        xml += `<text>T&apos;s time     ${serialNumber.padStart(5, '0')}&#10;</text>`;
+        xml += '<text>--------------------------------&#10;</text>';
+        
+        // 型番
+        xml += '<text width="1" height="1" em="false"/>';
+        xml += `<text>${escapeXml(modelNumber)}&#10;&#10;</text>`;
+        
+        // 購入価格
+        xml += `<text>購入価格　¥${Number(purchasePrice).toLocaleString()}-&#10;</text>`;
+        
+        // 電池代
+        if (batteryCost) {
+            xml += `<text>電池代　¥${Number(batteryCost).toLocaleString()}-&#10;</text>`;
+        }
+        
+        // ベルト代
+        if (beltCost) {
+            xml += `<text>ベルト代　¥${Number(beltCost).toLocaleString()}-&#10;</text>`;
+        }
+        
+        xml += '<text>&#10;</text>';
+        
+        // 希望金額
+        xml += '<text width="2" height="2" em="true"/>';
+        xml += `<text>希望金額　¥${Number(desiredPrice).toLocaleString()}-&#10;&#10;</text>`;
+        
+        // 日時
+        xml += '<text width="1" height="1" em="false"/>';
+        xml += `<text>${escapeXml(dateString)}&#10;&#10;</text>`;
+        
+        // QRコード（中央揃え、サイズ5）
+        xml += `<symbol type="qrcode_model_2" level="h" width="5" height="0" size="0">${qrcodeNumber}</symbol>`;
+        xml += `<text>&#10;${qrcodeNumber}&#10;</text>`;
+        
+        xml += '<feed line="2"/>';
+        xml += '<cut type="feed"/>';
+        xml += '</epos-print>';
+        
+        console.log('生成されたXML:', xml);
+        
+        // Base64エンコード
+        const base64XML = btoa(unescape(encodeURIComponent(xml)));
+        
+        console.log('Base64エンコード完了、文字数:', base64XML.length);
+        
+        // URLスキーム生成
+        const printURL = `epos-print://print?devid=local_printer&timeout=10000&printdata=${base64XML}`;
+        
+        console.log('URLスキーム:', printURL.substring(0, 100) + '...');
+        
+        // URLスキームを開く
+        window.location.href = printURL;
+        
+        console.log('PrintAssist起動完了');
+        showMessage('PrintAssistアプリを起動しました', 'success');
+        
+        // 連番を自動的に1増やす
+        setTimeout(function() {
+            document.getElementById('serialNumber').value = parseInt(serialNumber) + 1;
+            updatePreview();
+        }, 1000);
+        
+    } catch (error) {
+        console.error('PrintAssist印刷エラー:', error);
+        showMessage('印刷エラーが発生しました: ' + error.message, 'error');
+    }
+}
+
+// XML特殊文字エスケープ
+function escapeXml(str) {
+    return str.replace(/&/g, '&amp;')
+              .replace(/</g, '&lt;')
+              .replace(/>/g, '&gt;')
+              .replace(/"/g, '&quot;')
+              .replace(/'/g, '&apos;');
 }
 
 // Bluetooth接続で印刷
