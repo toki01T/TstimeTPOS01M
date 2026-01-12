@@ -199,6 +199,8 @@ function printWithPrintAssist(serialNumber, modelNumber, purchasePrice, batteryC
         // ePOS-Print XML生成
         let xml = '<?xml version="1.0" encoding="utf-8"?>';
         xml += '<epos-print xmlns="http://www.epson-pos.com/schemas/2011/03/epos-print">';
+        xml += '<text lang="ja"/>'; // 日本語設定
+        xml += '<text font="font_a"/>'; // Font A（日本語対応）
         xml += '<text align="center"/>';
         xml += '<text width="2" height="1" em="true"/>';
         xml += `<text>T&apos;s time     ${serialNumber.padStart(5, '0')}&#10;</text>`;
@@ -432,6 +434,8 @@ function executePrint(eposDevice, serialNumber, modelNumber, purchasePrice, batt
                 const barcodeNumber = `${now.getFullYear()}${(now.getMonth()+1).toString().padStart(2,'0')}${now.getDate().toString().padStart(2,'0')}${serialNumber.padStart(5, '0')}`;
                 
                 // 印刷データ作成
+                printerObj.addTextLang('ja'); // 日本語設定
+                printerObj.addTextFont(printerObj.FONT_A); // Font A（日本語対応）
                 printerObj.addTextAlign(printerObj.ALIGN_CENTER);
                 
                 // ヘッダー行
