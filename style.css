@@ -279,20 +279,124 @@ main {
 }
 
 @media (max-width: 768px) {
+    body {
+        padding: 10px;
+    }
+    
+    .container {
+        padding: 15px;
+    }
+    
     main {
         grid-template-columns: 1fr;
+        gap: 20px;
     }
     
     header h1 {
-        font-size: 2em;
+        font-size: 1.8em;
+    }
+    
+    .device-info {
+        font-size: 0.85em;
+        padding: 8px 15px;
+    }
+    
+    .form-section,
+    .preview-section {
+        padding: 15px;
+    }
+    
+    .form-section h2,
+    .preview-section h2 {
+        font-size: 1.3em;
+        margin-bottom: 15px;
+    }
+    
+    .form-group {
+        margin-bottom: 15px;
+    }
+    
+    .form-group label {
+        font-size: 0.95em;
+    }
+    
+    .form-group input,
+    .form-group select {
+        padding: 10px;
+        font-size: 16px; /* iOS zoom防止 */
+    }
+    
+    .preview-card {
+        padding: 15px;
+        max-width: 100%;
+        overflow-x: hidden;
+    }
+    
+    .store-name {
+        font-size: 1.4em;
+    }
+    
+    .serial-number {
+        font-size: 1em;
+    }
+    
+    .preview-model {
+        font-size: 1em;
+        margin: 15px 0;
+        word-break: break-all;
+    }
+    
+    .preview-line {
+        font-size: 0.9em;
+        padding: 6px 0;
+        flex-wrap: wrap;
+    }
+    
+    .preview-desired-price {
+        margin: 20px 0;
+        padding: 15px;
+    }
+    
+    .preview-desired-price .label {
+        font-size: 0.9em;
+    }
+    
+    .preview-desired-price .value {
+        font-size: 1.6em;
+    }
+    
+    .preview-datetime {
+        font-size: 0.85em;
+    }
+    
+    #qrcode {
+        margin: 0 auto;
+    }
+    
+    #qrcode img {
+        max-width: 120px !important;
+        height: auto !important;
+    }
+    
+    .qrcode-text {
+        font-size: 0.9em;
+        word-break: break-all;
     }
     
     .button-section {
         flex-direction: column;
+        gap: 10px;
     }
     
     .btn-primary,
     .btn-secondary {
         width: 100%;
+        padding: 12px 20px;
+        font-size: 1em;
+    }
+    
+    .status-message {
+        font-size: 0.9em;
+        padding: 12px;
     }
 }

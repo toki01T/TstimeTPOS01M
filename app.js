@@ -118,7 +118,8 @@ function printLabel() {
     
     // デバイスに応じた印刷処理
     if (isMobileDevice()) {
-        // iPad/iPhone: PrintAssist経由
+        // iPad/iPhone: PrintAssist経由（SDKチェック不要）
+        console.log('モバイルデバイスを検出: PrintAssist印刷を使用');
         printWithPrintAssist(serialNumber, modelNumber, purchasePrice, batteryCost, beltCost, desiredPrice);
     } else {
         // PC: ePOS-Print SDK
@@ -136,7 +137,7 @@ function printLabel() {
             return;
         }
         
-        // ePOS-Print SDKの確認
+        // ePOS-Print SDKの確認（PCのみ）
         if (typeof epson === 'undefined') {
             showMessage('ePOS-Print SDKが読み込まれていません。epos-2.27.0.jsが正しく配置されているか確認してください。', 'error');
             console.error('epsonオブジェクトが見つかりません');
