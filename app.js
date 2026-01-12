@@ -177,10 +177,15 @@ function printWithPrintAssist(serialNumber, modelNumber, purchasePrice, batteryC
     console.log('=== PrintAssist印刷開始 ===');
     console.log('入力データ:', {serialNumber, modelNumber, purchasePrice, batteryCost, beltCost, desiredPrice});
     
-    // PrintAssistアプリの確認メッセージ
-    showMessage('PrintAssistアプリで印刷します。アプリがインストールされていることを確認してください。', 'success');
-    console.log('PrintAssist印刷を実行します');
-    console.log('User Agent:', navigator.userAgent);
+    // PrintAssistアプリの確認を促す
+    if (confirm('PrintAssistアプリで印刷します。\n\nPrintAssistがインストールされていますか？\n\n「OK」= インストール済み（印刷実行）\n「キャンセル」= 未インストール（App Storeへ移動）')) {
+        console.log('PrintAssist印刷を実行します');
+    } else {
+        // App Storeへ移動
+        window.location.href = 'https://apps.apple.com/jp/app/epson-tm-print-assistant/id1025534382';
+        showMessage('App StoreからPrintAssistをインストールしてください', 'error');
+        return;
+    }
     
     try {
         // 日時生成
@@ -224,16 +229,22 @@ function printWithPrintAssist(serialNumber, modelNumber, purchasePrice, batteryC
         console.log('生成されたXML:');
         console.log(xml);
         
-        // Base64エンコード（UTF-8対応）
-        const base64XML = btoa(unescape(encodeURIComponent(xml)));
+        // UTF-8エンコード → Base64エンコード（PrintAssist公式方法）
+        // 日本語を含むXMLを正しくエンコード
+        const utf8Bytes = new TextEncoder().encode(xml);
+        let binaryString = '';
+        for (let i = 0; i < utf8Bytes.length; i++) {
+            binaryString += String.fromCharCode(utf8Bytes[i]);
+        }
+        const base64XML = btoa(binaryString);
+        
         console.log('Base64エンコード完了');
         console.log('Base64文字数:', base64XML.length);
         console.log('Base64データ（最初の100文字）:', base64XML.substring(0, 100));
         
-        // PrintAssist用URLスキーム生成
-        // 形式: epos-print://<printer_name>?<parameters>
-        // または: epos-print://print?devid=<device>&timeout=<ms>&printdata=<base64>
-        const printURL = `epos-print://local_printer?timeout=10000&base64=${base64XML}`;
+        // URLスキーム生成（PrintAssist公式フォーマット）
+        // 注意：Base64データはそのまま渡す（encodeURIComponent不要）
+        const printURL = `epos-print://print?devid=local_printer&timeout=10000&printdata=${base64XML}`;
         console.log('完全なURLスキーム長:', printURL.length);
         console.log('URLスキーム（最初の200文字）:', printURL.substring(0, 200));
         
@@ -243,30 +254,17 @@ function printWithPrintAssist(serialNumber, modelNumber, purchasePrice, batteryC
         // 少し待ってからURLスキームを開く
         setTimeout(function() {
             console.log('URLスキームを開きます...');
-            console.log('使用するURL:', printURL.substring(0, 300));
             
-            // 方法1: window.location（最も確実）
-            try {
-                window.location.href = printURL;
-                console.log('window.location.href で起動試行');
-                showMessage('PrintAssistアプリを起動しています...', 'success');
-            } catch (e) {
-                console.error('window.location.href エラー:', e);
-                
-                // 方法2: aタグクリック（代替手段）
-                try {
-                    const link = document.createElement('a');
-                    link.href = printURL;
-                    link.target = '_blank';
-                    document.body.appendChild(link);
-                    link.click();
-                    document.body.removeChild(link);
-                    console.log('aタグクリックで起動試行');
-                } catch (e2) {
-                    console.error('aタグクリック エラー:', e2);
-                    showMessage('PrintAssistアプリの起動に失敗しました。アプリがインストールされているか確認してください。', 'error');
-                }
-            }
+            // iOS/iPadで確実に動作する方法
+            const link = document.createElement('a');
+            link.href = printURL;
+            link.style.display = 'none';
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+            console.log('URLスキーム起動完了');
+            
+            showMessage('PrintAssistアプリに印刷データを送信しました', 'success');
         }, 500);
         
         console.log('=== PrintAssist起動処理完了 ===');
