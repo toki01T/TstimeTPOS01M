@@ -1,8 +1,27 @@
 // グローバル変数
 let printer = null;
 
+// デバイス判定関数
+function isMobileDevice() {
+    const ua = navigator.userAgent.toLowerCase();
+    const isMobile = /iphone|ipad|ipod|android/.test(ua);
+    console.log('User Agent:', ua);
+    console.log('モバイルデバイス判定:', isMobile);
+    return isMobile;
+}
+
 // ページ読み込み時の初期化
 document.addEventListener('DOMContentLoaded', function() {
+    // デバイス情報表示
+    const deviceInfo = document.getElementById('deviceInfo');
+    if (isMobileDevice()) {
+        deviceInfo.textContent = '📱 モバイルデバイス検出 - PrintAssist印刷を使用';
+        deviceInfo.style.backgroundColor = '#4CAF50';
+    } else {
+        deviceInfo.textContent = '💻 PCデバイス検出 - ePOS-Print SDK印刷を使用';
+        deviceInfo.style.backgroundColor = '#2196F3';
+    }
+    console.log('デバイス情報:', deviceInfo.textContent);
     // 接続方法の切り替え
     document.getElementById('connectionType').addEventListener('change', function() {
         const bluetoothGroup = document.getElementById('bluetoothGroup');
@@ -155,8 +174,11 @@ function printLabel() {
 
 // PrintAssist印刷（iPad/iPhone）
 function printWithPrintAssist(serialNumber, modelNumber, purchasePrice, batteryCost, beltCost, desiredPrice) {
-    console.log('PrintAssist印刷を開始します');
-    showMessage('PrintAssistで印刷を開始します...', 'success');
+    console.log('=== PrintAssist印刷開始 ===');
+    console.log('入力データ:', {serialNumber, modelNumber, purchasePrice, batteryCost, beltCost, desiredPrice});
+    
+    // PrintAssistアプリの確認を促す
+    showMessage('PrintAssistで印刷します。アプリがインストールされていることを確認してください。', 'success');
     
     try {
         // 日時生成
@@ -164,80 +186,92 @@ function printWithPrintAssist(serialNumber, modelNumber, purchasePrice, batteryC
         const dateString = `${now.getFullYear()}年${(now.getMonth()+1).toString().padStart(2,'0')}月${now.getDate().toString().padStart(2,'0')}日 ${now.getHours().toString().padStart(2,'0')}:${now.getMinutes().toString().padStart(2,'0')} ${now.getSeconds().toString().padStart(2,'0')}秒`;
         const qrcodeNumber = `${now.getFullYear()}${(now.getMonth()+1).toString().padStart(2,'0')}${now.getDate().toString().padStart(2,'0')}${serialNumber.padStart(5, '0')}`;
         
+        console.log('日時:', dateString);
+        console.log('QRコード番号:', qrcodeNumber);
+        
         // ePOS-Print XML生成
         let xml = '<?xml version="1.0" encoding="utf-8"?>';
         xml += '<epos-print xmlns="http://www.epson-pos.com/schemas/2011/03/epos-print">';
-        
-        // 中央揃え
         xml += '<text align="center"/>';
-        
-        // ヘッダー
         xml += '<text width="2" height="1" em="true"/>';
         xml += `<text>T&apos;s time     ${serialNumber.padStart(5, '0')}&#10;</text>`;
         xml += '<text>--------------------------------&#10;</text>';
-        
-        // 型番
         xml += '<text width="1" height="1" em="false"/>';
         xml += `<text>${escapeXml(modelNumber)}&#10;&#10;</text>`;
-        
-        // 購入価格
         xml += `<text>購入価格　¥${Number(purchasePrice).toLocaleString()}-&#10;</text>`;
         
-        // 電池代
         if (batteryCost) {
             xml += `<text>電池代　¥${Number(batteryCost).toLocaleString()}-&#10;</text>`;
         }
         
-        // ベルト代
         if (beltCost) {
             xml += `<text>ベルト代　¥${Number(beltCost).toLocaleString()}-&#10;</text>`;
         }
         
         xml += '<text>&#10;</text>';
-        
-        // 希望金額
         xml += '<text width="2" height="2" em="true"/>';
         xml += `<text>希望金額　¥${Number(desiredPrice).toLocaleString()}-&#10;&#10;</text>`;
-        
-        // 日時
         xml += '<text width="1" height="1" em="false"/>';
         xml += `<text>${escapeXml(dateString)}&#10;&#10;</text>`;
-        
-        // QRコード（中央揃え、サイズ5）
         xml += `<symbol type="qrcode_model_2" level="h" width="5" height="0" size="0">${qrcodeNumber}</symbol>`;
         xml += `<text>&#10;${qrcodeNumber}&#10;</text>`;
-        
         xml += '<feed line="2"/>';
         xml += '<cut type="feed"/>';
         xml += '</epos-print>';
         
-        console.log('生成されたXML:', xml);
+        console.log('生成されたXML:');
+        console.log(xml);
         
         // Base64エンコード
         const base64XML = btoa(unescape(encodeURIComponent(xml)));
-        
-        console.log('Base64エンコード完了、文字数:', base64XML.length);
+        console.log('Base64エンコード完了');
+        console.log('Base64文字数:', base64XML.length);
+        console.log('Base64データ（最初の100文字）:', base64XML.substring(0, 100));
         
         // URLスキーム生成
         const printURL = `epos-print://print?devid=local_printer&timeout=10000&printdata=${base64XML}`;
+        console.log('完全なURLスキーム長:', printURL.length);
+        console.log('URLスキーム（最初の200文字）:', printURL.substring(0, 200));
         
-        console.log('URLスキーム:', printURL.substring(0, 100) + '...');
+        // デバッグ用：ユーザーに表示
+        showMessage(`印刷データを生成しました（${base64XML.length}文字）。PrintAssistを起動します...`, 'success');
         
-        // URLスキームを開く
-        window.location.href = printURL;
+        // 少し待ってからURLスキームを開く
+        setTimeout(function() {
+            console.log('URLスキームを開きます...');
+            window.location.href = printURL;
+            console.log('window.location.href実行完了');
+            
+            // PrintAssistが起動しない場合の代替方法を試す
+            setTimeout(function() {
+                // iframeを使った方法も試す
+                const iframe = document.createElement('iframe');
+                iframe.style.display = 'none';
+                iframe.src = printURL;
+                document.body.appendChild(iframe);
+                console.log('iframe経由でも試行しました');
+                
+                setTimeout(function() {
+                    document.body.removeChild(iframe);
+                }, 1000);
+            }, 500);
+        }, 500);
         
-        console.log('PrintAssist起動完了');
-        showMessage('PrintAssistアプリを起動しました', 'success');
+        console.log('=== PrintAssist起動処理完了 ===');
         
         // 連番を自動的に1増やす
         setTimeout(function() {
             document.getElementById('serialNumber').value = parseInt(serialNumber) + 1;
             updatePreview();
-        }, 1000);
+            showMessage('印刷データを送信しました。PrintAssistアプリで確認してください。', 'success');
+        }, 2000);
         
     } catch (error) {
-        console.error('PrintAssist印刷エラー:', error);
-        showMessage('印刷エラーが発生しました: ' + error.message, 'error');
+        console.error('=== PrintAssist印刷エラー ===');
+        console.error('エラー詳細:', error);
+        console.error('エラーメッセージ:', error.message);
+        console.error('エラースタック:', error.stack);
+        showMessage('印刷エラー: ' + error.message + ' (コンソールで詳細を確認してください)', 'error');
     }
 }
 
@@ -464,7 +498,7 @@ function clearForm() {
     document.getElementById('desiredPrice').value = '';
     // 連番はクリアしない
     updatePreview();
-    showMessage('フォームをクリアしました', 'success');
+    showMessage('フォームをクリアしました（連番は維持されます）', 'success');
 }
 
 // メッセージ表示関数
