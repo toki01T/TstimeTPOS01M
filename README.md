@@ -45,6 +45,24 @@ iOS/AndroidデバイスではBluetooth接続が正式サポートされていま
 
 ## 使い方
 
+### iPad/iPhoneでの使用（推奨）
+
+1. **PrintAssistアプリをインストール**
+   - App Store: https://apps.apple.com/jp/app/epson-tm-print-assistant/id1025534382
+   - アプリ名: 「Epson TM Print Assistant」
+
+2. **GitHubページにアクセス**
+   ```
+   https://toki01t.github.io/TstimeTPOS01M/
+   ```
+
+3. **プリンターとBluetooth接続**
+   - iPadの設定 → Bluetooth → TM-M30_005462 に接続
+
+4. **印刷実行**
+   - データを入力して「印刷」ボタンをクリック
+   - PrintAssistアプリが自動起動します
+
 ### 1. プリンター接続設定
 
 上記の推奨方法でWi-Fi接続に変更してください。
