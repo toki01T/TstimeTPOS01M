@@ -1,0 +1,130 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>T's time - 値札印刷システム</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>T's time</h1>
+            <div id="deviceInfo" class="device-info">実行環境を確認中...</div>
+        </header>
+
+        <main>
+            <div class="form-section">
+                <h2>値札作成</h2>
+                
+                <div class="form-group">
+                    <label for="serialNumber">連番:</label>
+                    <input type="number" id="serialNumber" placeholder="例: 1" value="1">
+                </div>
+
+                <div class="form-group">
+                    <label for="modelNumber">型番:</label>
+                    <input type="text" id="modelNumber" placeholder="例: ABC-123" maxlength="35">
+                </div>
+
+                <div class="form-group">
+                    <label for="purchasePrice">購入価格:</label>
+                    <input type="number" id="purchasePrice" placeholder="例: 5000">
+                </div>
+
+                <div class="form-group">
+                    <label for="batteryCost">電池代:</label>
+                    <input type="number" id="batteryCost" placeholder="例: 300">
+                </div>
+
+                <div class="form-group">
+                    <label for="beltCost">ベルト代:</label>
+                    <input type="number" id="beltCost" placeholder="例: 500">
+                </div>
+
+                <div class="form-group">
+                    <label for="desiredPrice">希望金額:</label>
+                    <input type="number" id="desiredPrice" placeholder="例: 8000">
+                </div>
+
+                <div class="form-group">
+                    <label for="connectionType">接続方法:</label>
+                    <select id="connectionType">
+                        <option value="bluetooth">Bluetooth</option>
+                        <option value="network">Wi-Fi/ネットワーク</option>
+                    </select>
+                </div>
+
+                <div class="form-group" id="bluetoothGroup">
+                    <label for="printerBT">Bluetoothアドレス:</label>
+                    <input type="text" id="printerBT" placeholder="BD_ADDR" value="00:01:90:C7:7A:B2" readonly>
+                    <small style="color: #666; display: block; margin-top: 5px;">
+                        デバイス名: T's time TM-M30_005462<br>
+                        Windows: 事前にペアリングが必要です (Passkey: 4126)
+                    </small>
+                </div>
+
+                <div class="form-group" id="networkGroup" style="display: none;">
+                    <label for="printerIP">プリンターIPアドレス:</label>
+                    <input type="text" id="printerIP" placeholder="例: 192.168.1.100" value="192.168.1.100">
+                    <small style="color: #666; display: block; margin-top: 5px;">WindowsでWi-Fi接続した場合はIPアドレスを入力</small>
+                </div>
+            </div>
+
+            <div class="preview-section">
+                <h2>プレビュー</h2>
+                <div class="preview-card" id="preview">
+                    <div class="preview-header-line">
+                        <span class="store-name">T's time</span>
+                        <span class="serial-number" id="previewSerial">00001</span>
+                    </div>
+                    
+                    <div class="preview-model" id="previewModel">-</div>
+                    
+                    <div class="preview-line">
+                        <span class="label">購入価格</span>
+                        <span class="value" id="previewPurchase">￥-</span>
+                    </div>
+                    
+                    <div class="preview-line">
+                        <span class="label">電池代</span>
+                        <span class="value" id="previewBattery">￥-</span>
+                    </div>
+                    
+                    <div class="preview-line">
+                        <span class="label">ベルト代</span>
+                        <span class="value" id="previewBelt">￥-</span>
+                    </div>
+                    
+                    <div class="preview-desired-price">
+                        <div class="label">希望金額</div>
+                        <div class="value" id="previewPrice">￥-</div>
+                    </div>
+                    
+                    <div class="preview-datetime" id="previewDate">-</div>
+                    
+                    <div class="barcode-section">
+                        <svg id="barcode"></svg>
+                        <div class="barcode-text" id="barcodeText">-</div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="button-section">
+                <button id="printBtn" class="btn-primary">印刷</button>
+                <button id="clearBtn" class="btn-secondary">クリア</button>
+            </div>
+
+            <div id="statusMessage" class="status-message"></div>
+        </main>
+    </div>
+
+    <script>
+        // ePOS-Print SDKのロードエラーを処理
+        window.epsonSDKLoaded = false;
+    </script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+    <script src="epos-2.27.0.js" onerror="console.warn('ePOS SDK not loaded')"></script>
+    <script src="app.js"></script>
+</body>
+</html>
