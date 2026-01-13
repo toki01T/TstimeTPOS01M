@@ -317,12 +317,17 @@ function printWithPrintAssist(serialNumber, modelNumber, category, operation, pu
         let xml = '<?xml version="1.0" encoding="utf-8"?>';
         xml += '<epos-print xmlns="http://www.epson-pos.com/schemas/2011/03/epos-print">';
         xml += '<text lang="ja"/>'; // 日本語設定
-        xml += '<text align="center"/>';
         
-        // ヘッダー行: T's time（半角）　連番（全角）
+        // ヘッダー行: T's time（左寄せ）　連番（右寄せ）
         xml += '<text width="2" height="1" em="true"/>';
+        xml += '<text align="left"/>';
+        xml += `<text>T&apos;s time</text>`;
+        xml += '<text align="right"/>';
         const serialFullWidth = toFullWidth(serialNumber.padStart(5, '0'));
-        xml += `<text>T&apos;s time   ${serialFullWidth}&#10;&#10;</text>`;
+        xml += `<text>${serialFullWidth}&#10;&#10;</text>`;
+        
+        // 中央揃えに戻す
+        xml += '<text align="center"/>';
         
         // カテゴリー表示（中央揃え）
         xml += '<text width="1" height="1" em="false"/>';
