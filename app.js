@@ -386,15 +386,10 @@ function printWithPrintAssist(serialNumber, modelNumber, category, operation, pu
         
         xml += '<text>&#10;</text>'; // 空行
         
-        // 希望金額（9万以上で2行）- 「円」表記、ハイフンなし
+        // 金額（希望金額）- 金額のみ表示
         const desiredNum = Number(desiredPrice);
         xml += '<text width="2" height="2" em="true"/>';
-        if (desiredNum >= 90000) {
-            xml += `<text>希望金額&#10;</text>`;
-            xml += `<text>${desiredNum.toLocaleString()}円&#10;&#10;</text>`;
-        } else {
-            xml += `<text>希望金額${desiredNum.toLocaleString()}円&#10;&#10;</text>`;
-        }
+        xml += `<text>${desiredNum.toLocaleString()}円&#10;&#10;</text>`;
         
         // 注意文
         xml += '<text width="1" height="1" em="false"/>';
@@ -455,13 +450,12 @@ function printWithPrintAssist(serialNumber, modelNumber, category, operation, pu
         saveToHistory(serialNumber, modelNumber, category, operation, purchasePrice, batteryCost, beltCost, desiredPrice);
         
         // 連番を自動的に1増やして保存
-        setTimeout(function() {
-            const newSerial = parseInt(serialNumber) + 1;
-            saveSerialNumber(newSerial);
-            updateSerialDisplay();
-            updatePreview();
-            showMessage('印刷データを送信しました。PrintAssistアプリで確認してください。', 'success');
-        }, 2000);
+        const newSerial = parseInt(serialNumber) + 1;
+        saveSerialNumber(newSerial);
+        updateSerialDisplay();
+        updatePreview();
+        
+        showMessage('印刷データを送信しました。連番を ' + newSerial + ' に更新しました。', 'success');
         
     } catch (error) {
         console.error('=== PrintAssist印刷エラー ===');
