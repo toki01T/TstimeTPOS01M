@@ -31,6 +31,9 @@ function updateSerialDisplay() {
 
 // ページ読み込み時の初期化
 document.addEventListener('DOMContentLoaded', function() {
+    // URLパラメータから値札データを読み込む
+    loadFromURL();
+    
     // 保存された連番を読み込む
     const savedSerial = loadSerialNumber();
     document.getElementById('serialNumber').value = savedSerial;
@@ -88,6 +91,21 @@ document.addEventListener('DOMContentLoaded', function() {
     document.getElementById('serialNumber').addEventListener('change', function() {
         saveSerialNumber(this.value);
         updateSerialDisplay();
+    });
+    
+    // 履歴表示ボタン
+    document.getElementById('showHistory').addEventListener('click', function() {
+        showHistoryModal();
+    });
+    
+    // 履歴モーダルを閉じる
+    document.getElementById('closeHistory').addEventListener('click', function() {
+        closeHistoryModal();
+    });
+    
+    // オーバーレイクリックで履歴モーダルも閉じる
+    document.getElementById('overlay').addEventListener('click', function() {
+        closeHistoryModal();
     });
     // 稼働方式の切り替え
     document.getElementById('operationType').addEventListener('change', function() {
@@ -288,8 +306,12 @@ function printWithPrintAssist(serialNumber, modelNumber, category, operation, pu
         const dateString = `${now.getFullYear()}年${(now.getMonth()+1).toString().padStart(2,'0')}月${now.getDate().toString().padStart(2,'0')}日 ${now.getHours().toString().padStart(2,'0')}:${now.getMinutes().toString().padStart(2,'0')} ${now.getSeconds().toString().padStart(2,'0')}秒`;
         const qrcodeNumber = `${now.getFullYear()}${(now.getMonth()+1).toString().padStart(2,'0')}${now.getDate().toString().padStart(2,'0')}${serialNumber.padStart(5, '0')}`;
         
+        // QRコード用のデータURL生成
+        const dataURL = generateDataURL(modelNumber, category, operation, purchasePrice, batteryCost, beltCost, desiredPrice);
+        
         console.log('日時:', dateString);
         console.log('QRコード番号:', qrcodeNumber);
+        console.log('データURL:', dataURL);
         
         // ePOS-Print XML生成（日本語対応、58mm用紙）
         let xml = '<?xml version="1.0" encoding="utf-8"?>';
@@ -358,8 +380,8 @@ function printWithPrintAssist(serialNumber, modelNumber, category, operation, pu
         xml += '<text width="1" height="1" em="false"/>';
         xml += `<text>${escapeXml(dateString)}&#10;&#10;</text>`;
         
-        // QRコード
-        xml += `<symbol type="qrcode_model_2" level="h" width="5" height="0" size="0">${qrcodeNumber}</symbol>`;
+        // QRコード（データURL）
+        xml += `<symbol type="qrcode_model_2" level="h" width="5" height="0" size="0">${escapeXml(dataURL)}</symbol>`;
         xml += `<text>&#10;${qrcodeNumber}&#10;</text>`;
         xml += '<feed line="2"/>';
         xml += '<cut type="feed"/>';
@@ -402,6 +424,9 @@ function printWithPrintAssist(serialNumber, modelNumber, category, operation, pu
         }, 500);
         
         console.log('=== PrintAssist起動処理完了 ===');
+        
+        // 履歴を保存
+        saveToHistory(serialNumber, modelNumber, category, operation, purchasePrice, batteryCost, beltCost, desiredPrice);
         
         // 連番を自動的に1増やして保存
         setTimeout(function() {
@@ -687,4 +712,221 @@ function showMessage(message, type) {
             statusDiv.style.display = 'none';
         }
     }, 5000);
+}
+
+// === 履歴管理機能 ===
+
+// データURLを生成
+function generateDataURL(modelNumber, category, operation, purchasePrice, batteryCost, beltCost, desiredPrice) {
+    const baseURL = window.location.origin + window.location.pathname;
+    const params = new URLSearchParams();
+    
+    if (modelNumber) params.append('model', modelNumber);
+    if (category) params.append('category', category);
+    if (operation) params.append('operation', operation);
+    if (purchasePrice) params.append('price1', purchasePrice);
+    if (batteryCost) params.append('price2', batteryCost);
+    if (beltCost) params.append('price3', beltCost);
+    if (desiredPrice) params.append('price4', desiredPrice);
+    
+    return baseURL + '?' + params.toString();
+}
+
+// URLパラメータから値札データを読み込む
+function loadFromURL() {
+    const urlParams = new URLSearchParams(window.location.search);
+    
+    const modelNumber = urlParams.get('model');
+    const category = urlParams.get('category');
+    const operation = urlParams.get('operation');
+    const purchasePrice = urlParams.get('price1');
+    const batteryCost = urlParams.get('price2');
+    const beltCost = urlParams.get('price3');
+    const desiredPrice = urlParams.get('price4');
+    
+    // パラメータが存在する場合のみ読み込む
+    if (modelNumber || category || operation) {
+        console.log('URLパラメータから値札データを読み込みます');
+        
+        if (modelNumber) document.getElementById('modelNumber').value = modelNumber;
+        if (purchasePrice) document.getElementById('purchasePrice').value = purchasePrice;
+        if (batteryCost) document.getElementById('batteryCost').value = batteryCost;
+        if (beltCost) document.getElementById('beltCost').value = beltCost;
+        if (desiredPrice) document.getElementById('desiredPrice').value = desiredPrice;
+        
+        // カテゴリーの設定
+        if (category) {
+            const categorySelect = document.getElementById('categoryType');
+            const categoryOptions = Array.from(categorySelect.options).map(opt => opt.value);
+            
+            if (categoryOptions.includes(category)) {
+                categorySelect.value = category;
+            } else {
+                categorySelect.value = 'other';
+                document.getElementById('otherCategory').value = category;
+                document.getElementById('otherCategoryGroup').style.display = 'block';
+            }
+        }
+        
+        // 稼働方式の設定
+        if (operation) {
+            const operationSelect = document.getElementById('operationType');
+            const operationOptions = Array.from(operationSelect.options).map(opt => opt.value);
+            
+            if (operationOptions.includes(operation)) {
+                operationSelect.value = operation;
+            } else {
+                operationSelect.value = 'other';
+                document.getElementById('otherOperation').value = operation;
+                document.getElementById('otherOperationGroup').style.display = 'block';
+            }
+        }
+        
+        showMessage('QRコードから値札データを読み込みました', 'success');
+    }
+}
+
+// 履歴に保存
+function saveToHistory(serialNumber, modelNumber, category, operation, purchasePrice, batteryCost, beltCost, desiredPrice) {
+    try {
+        const history = getHistory();
+        
+        const historyItem = {
+            date: new Date().toISOString(),
+            serialNumber: serialNumber,
+            category: category || '',
+            modelNumber: modelNumber,
+            operation: operation || '',
+            purchasePrice: purchasePrice || '',
+            batteryCost: batteryCost || '',
+            beltCost: beltCost || '',
+            desiredPrice: desiredPrice
+        };
+        
+        // 最新の履歴を先頭に追加
+        history.unshift(historyItem);
+        
+        // 最新50件のみ保持
+        if (history.length > 50) {
+            history.splice(50);
+        }
+        
+        localStorage.setItem('printHistory', JSON.stringify(history));
+        console.log('履歴を保存しました:', historyItem);
+    } catch (error) {
+        console.error('履歴保存エラー:', error);
+    }
+}
+
+// 履歴を取得
+function getHistory() {
+    try {
+        const historyJSON = localStorage.getItem('printHistory');
+        return historyJSON ? JSON.parse(historyJSON) : [];
+    } catch (error) {
+        console.error('履歴読み込みエラー:', error);
+        return [];
+    }
+}
+
+// 履歴モーダルを表示
+function showHistoryModal() {
+    const modal = document.getElementById('historyModal');
+    const overlay = document.getElementById('overlay');
+    const historyList = document.getElementById('historyList');
+    
+    // サイドメニューを閉じる
+    document.getElementById('sideMenu').classList.remove('active');
+    
+    // 履歴を読み込んで表示
+    const history = getHistory();
+    
+    if (history.length === 0) {
+        historyList.innerHTML = '<p class="no-history">履歴がありません</p>';
+    } else {
+        historyList.innerHTML = '';
+        
+        history.forEach((item, index) => {
+            const historyItem = document.createElement('div');
+            historyItem.className = 'history-item';
+            
+            const date = new Date(item.date);
+            const dateStr = `${date.getFullYear()}/${(date.getMonth()+1).toString().padStart(2,'0')}/${date.getDate().toString().padStart(2,'0')} ${date.getHours().toString().padStart(2,'0')}:${date.getMinutes().toString().padStart(2,'0')}`;
+            
+            historyItem.innerHTML = `
+                <div class="history-item-header">
+                    <span class="history-date">${dateStr}</span>
+                    <span class="history-serial">No.${item.serialNumber}</span>
+                </div>
+                <div class="history-item-body">
+                    ${item.category ? `<div class="history-category">${item.category}</div>` : ''}
+                    <div class="history-model">${item.modelNumber}</div>
+                    ${item.operation ? `<div class="history-operation">${item.operation}</div>` : ''}
+                    <div class="history-price">¥${Number(item.desiredPrice).toLocaleString()}</div>
+                </div>
+            `;
+            
+            // クリックでフォームに復元
+            historyItem.addEventListener('click', function() {
+                loadFromHistory(item);
+                closeHistoryModal();
+            });
+            
+            historyList.appendChild(historyItem);
+        });
+    }
+    
+    modal.classList.add('active');
+    overlay.classList.add('active');
+}
+
+// 履歴モーダルを閉じる
+function closeHistoryModal() {
+    const modal = document.getElementById('historyModal');
+    const overlay = document.getElementById('overlay');
+    
+    modal.classList.remove('active');
+    overlay.classList.remove('active');
+}
+
+// 履歴からフォームに読み込む
+function loadFromHistory(item) {
+    document.getElementById('modelNumber').value = item.modelNumber;
+    document.getElementById('purchasePrice').value = item.purchasePrice || '';
+    document.getElementById('batteryCost').value = item.batteryCost || '';
+    document.getElementById('beltCost').value = item.beltCost || '';
+    document.getElementById('desiredPrice').value = item.desiredPrice;
+    
+    // カテゴリーの設定
+    if (item.category) {
+        const categorySelect = document.getElementById('categoryType');
+        const categoryOptions = Array.from(categorySelect.options).map(opt => opt.value);
+        
+        if (categoryOptions.includes(item.category)) {
+            categorySelect.value = item.category;
+            document.getElementById('otherCategoryGroup').style.display = 'none';
+        } else {
+            categorySelect.value = 'other';
+            document.getElementById('otherCategory').value = item.category;
+            document.getElementById('otherCategoryGroup').style.display = 'block';
+        }
+    }
+    
+    // 稼働方式の設定
+    if (item.operation) {
+        const operationSelect = document.getElementById('operationType');
+        const operationOptions = Array.from(operationSelect.options).map(opt => opt.value);
+        
+        if (operationOptions.includes(item.operation)) {
+            operationSelect.value = item.operation;
+            document.getElementById('otherOperationGroup').style.display = 'none';
+        } else {
+            operationSelect.value = 'other';
+            document.getElementById('otherOperation').value = item.operation;
+            document.getElementById('otherOperationGroup').style.display = 'block';
+        }
+    }
+    
+    updatePreview();
+    showMessage('履歴から値札データを読み込みました', 'success');
 }

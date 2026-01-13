@@ -35,9 +35,25 @@
                 <div class="menu-item">
                     <p class="menu-info">現在の連番: <span id="currentSerial">1</span></p>
                 </div>
+                <div class="menu-item">
+                    <button id="showHistory" class="menu-button">履歴を表示</button>
+                </div>
             </div>
         </div>
         <div class="overlay" id="overlay"></div>
+
+        <!-- 履歴表示モーダル -->
+        <div class="history-modal" id="historyModal">
+            <div class="history-modal-content">
+                <div class="history-modal-header">
+                    <h3>印刷履歴</h3>
+                    <button class="close-history" id="closeHistory">×</button>
+                </div>
+                <div class="history-list" id="historyList">
+                    <!-- 履歴がここに動的に追加されます -->
+                </div>
+            </div>
+        </div>
 
         <main>
             <div class="form-section">
