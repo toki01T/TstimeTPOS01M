@@ -263,9 +263,9 @@ function printWithPrintAssist(serialNumber, modelNumber, operation, purchasePric
         xml += '<text lang="ja"/>'; // 日本語設定
         xml += '<text align="center"/>';
         
-        // ヘッダー行: T's time　　　00001（通常サイズで配置）
-        xml += '<text width="1" height="1" em="false"/>';
-        xml += `<text smooth="true">T&apos;s time          ${serialNumber.padStart(5, '0')}&#10;&#10;</text>`;
+        // ヘッダー行: T's time　　　00001（半角英数字で表示）
+        xml += '<text width="1" height="1" em="false" font="font_a"/>';
+        xml += `<text>T's time          ${serialNumber.padStart(5, '0')}&#10;&#10;</text>`;
         
         // 型番（17文字で自動改行）
         const modelLines = splitText(modelNumber, 17);
@@ -279,38 +279,38 @@ function printWithPrintAssist(serialNumber, modelNumber, operation, purchasePric
             xml += `<text>${escapeXml(operation)}&#10;&#10;</text>`;
         }
         
-        // 購入価格（入力がある場合のみ）- 全角￥を使用
+        // 購入価格（入力がある場合のみ）- 「円」表記
         if (purchasePrice) {
             const priceNum = Number(purchasePrice);
             if (priceNum >= 100000) {
                 // 10万以上は2行
                 xml += `<text>購入価格&#10;</text>`;
-                xml += `<text>￥${priceNum.toLocaleString()}-&#10;</text>`;
+                xml += `<text>${priceNum.toLocaleString()}円-&#10;</text>`;
             } else {
-                xml += `<text>購入価格￥${priceNum.toLocaleString()}-&#10;</text>`;
+                xml += `<text>購入価格 ${priceNum.toLocaleString()}円-&#10;</text>`;
             }
         }
         
-        // 電池代（入力がある場合のみ）- 全角￥を使用
+        // 電池代（入力がある場合のみ）- 「円」表記
         if (batteryCost) {
-            xml += `<text>電池代￥${Number(batteryCost).toLocaleString()}-&#10;</text>`;
+            xml += `<text>電池代 ${Number(batteryCost).toLocaleString()}円-&#10;</text>`;
         }
         
-        // ベルト代（入力がある場合のみ）- 全角￥を使用
+        // ベルト代（入力がある場合のみ）- 「円」表記
         if (beltCost) {
-            xml += `<text>ベルト代￥${Number(beltCost).toLocaleString()}-&#10;</text>`;
+            xml += `<text>ベルト代 ${Number(beltCost).toLocaleString()}円-&#10;</text>`;
         }
         
         xml += '<text>&#10;</text>'; // 空行
         
-        // 希望金額（9万以上で2行）- 全角￥を使用
+        // 希望金額（9万以上で2行）- 「円」表記
         const desiredNum = Number(desiredPrice);
         xml += '<text width="2" height="2" em="true"/>';
         if (desiredNum >= 90000) {
             xml += `<text>希望金額&#10;</text>`;
-            xml += `<text>￥${desiredNum.toLocaleString()}-&#10;&#10;</text>`;
+            xml += `<text>${desiredNum.toLocaleString()}円-&#10;&#10;</text>`;
         } else {
-            xml += `<text>希望金額￥${desiredNum.toLocaleString()}-&#10;&#10;</text>`;
+            xml += `<text>希望金額 ${desiredNum.toLocaleString()}円-&#10;&#10;</text>`;
         }
         
         // 日時
