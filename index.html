@@ -9,32 +9,35 @@
 <body>
     <div class="container">
         <header>
-            <h1>T's time</h1>
             <button class="hamburger-menu" id="hamburgerMenu">
                 <span></span>
                 <span></span>
                 <span></span>
             </button>
+            <h1>T's time</h1>
         </header>
 
-        <!-- ハンバーガーメニューの内容 -->
-        <div class="menu-overlay" id="menuOverlay">
-            <div class="menu-content">
-                <button class="menu-close" id="menuClose">&times;</button>
-                <h2>設定</h2>
+        <!-- サイドメニュー -->
+        <div class="side-menu" id="sideMenu">
+            <div class="side-menu-header">
+                <h3>メニュー</h3>
+                <button class="close-menu" id="closeMenu">×</button>
+            </div>
+            <div class="side-menu-content">
                 <div class="menu-item">
-                    <label>現在の連番: <span id="currentSerial">1</span></label>
+                    <label for="menuSerialNumber">連番設定:</label>
+                    <input type="number" id="menuSerialNumber" placeholder="連番を入力">
+                    <button id="setSerialNumber" class="menu-button">設定</button>
                 </div>
                 <div class="menu-item">
-                    <button class="btn-menu" id="resetSerialBtn">連番をリセット</button>
+                    <button id="resetSerialNumber" class="menu-button-secondary">連番をリセット</button>
                 </div>
                 <div class="menu-item">
-                    <label for="setSerial">連番を指定:</label>
-                    <input type="number" id="setSerial" placeholder="例: 100" min="1">
-                    <button class="btn-menu" id="setSerialBtn">設定</button>
+                    <p class="menu-info">現在の連番: <span id="currentSerial">1</span></p>
                 </div>
             </div>
         </div>
+        <div class="overlay" id="overlay"></div>
 
         <main>
             <div class="form-section">

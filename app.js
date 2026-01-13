@@ -1,46 +1,5 @@
 // グローバル変数
 let printer = null;
-const SERIAL_NUMBER_KEY = 'ttime_serial_number';
-
-// LocalStorageから連番を読み込む
-function loadSerialNumber() {
-    const saved = localStorage.getItem(SERIAL_NUMBER_KEY);
-    return saved ? parseInt(saved) : 1;
-}
-
-// LocalStorageに連番を保存
-function saveSerialNumber(number) {
-    localStorage.setItem(SERIAL_NUMBER_KEY, number.toString());
-    console.log('連番を保存しました:', number);
-}
-
-// 連番をリセット
-function resetSerialNumber() {
-    localStorage.setItem(SERIAL_NUMBER_KEY, '1');
-    document.getElementById('serialNumber').value = '1';
-    updatePreview();
-    showMessage('連番を1にリセットしました', 'success');
-    updateMenuSerialDisplay();
-}
-
-// 連番を指定
-function setSerialNumber(number) {
-    if (number < 1) {
-        showMessage('連番は1以上を指定してください', 'error');
-        return;
-    }
-    localStorage.setItem(SERIAL_NUMBER_KEY, number.toString());
-    document.getElementById('serialNumber').value = number;
-    updatePreview();
-    showMessage(`連番を${number}に設定しました`, 'success');
-    updateMenuSerialDisplay();
-}
-
-// メニューの連番表示を更新
-function updateMenuSerialDisplay() {
-    const current = document.getElementById('serialNumber').value || '1';
-    document.getElementById('currentSerial').textContent = current;
-}
 
 // デバイス判定関数
 function isMobileDevice() {
@@ -51,53 +10,85 @@ function isMobileDevice() {
     return isMobile;
 }
 
+// 連番の保存と読み込み
+function saveSerialNumber(number) {
+    localStorage.setItem('serialNumber', number);
+    console.log('連番を保存しました:', number);
+}
+
+function loadSerialNumber() {
+    const saved = localStorage.getItem('serialNumber');
+    return saved ? parseInt(saved) : 1;
+}
+
+function updateSerialDisplay() {
+    const currentSerial = document.getElementById('serialNumber').value;
+    const display = document.getElementById('currentSerial');
+    if (display) {
+        display.textContent = currentSerial;
+    }
+}
+
 // ページ読み込み時の初期化
 document.addEventListener('DOMContentLoaded', function() {
-    // LocalStorageから連番を復元
+    // 保存された連番を読み込む
     const savedSerial = loadSerialNumber();
     document.getElementById('serialNumber').value = savedSerial;
-    console.log('連番を復元しました:', savedSerial);
+    console.log('保存された連番を読み込みました:', savedSerial);
     
-    // ハンバーガーメニューのイベント
-    document.getElementById('hamburgerMenu').addEventListener('click', function() {
-        document.getElementById('menuOverlay').classList.add('active');
-        updateMenuSerialDisplay();
+    // ハンバーガーメニューの設定
+    const hamburgerMenu = document.getElementById('hamburgerMenu');
+    const sideMenu = document.getElementById('sideMenu');
+    const closeMenu = document.getElementById('closeMenu');
+    const overlay = document.getElementById('overlay');
+    
+    hamburgerMenu.addEventListener('click', function() {
+        sideMenu.classList.add('active');
+        overlay.classList.add('active');
+        updateSerialDisplay();
     });
     
-    document.getElementById('menuClose').addEventListener('click', function() {
-        document.getElementById('menuOverlay').classList.remove('active');
+    closeMenu.addEventListener('click', function() {
+        sideMenu.classList.remove('active');
+        overlay.classList.remove('active');
     });
     
-    document.getElementById('menuOverlay').addEventListener('click', function(e) {
-        if (e.target === this) {
-            this.classList.remove('active');
-        }
+    overlay.addEventListener('click', function() {
+        sideMenu.classList.remove('active');
+        overlay.classList.remove('active');
     });
     
-    document.getElementById('resetSerialBtn').addEventListener('click', function() {
-        if (confirm('連番を1にリセットしますか？')) {
-            resetSerialNumber();
-        }
-    });
-    
-    document.getElementById('setSerialBtn').addEventListener('click', function() {
-        const newSerial = parseInt(document.getElementById('setSerial').value);
-        if (newSerial && newSerial > 0) {
-            setSerialNumber(newSerial);
-            document.getElementById('setSerial').value = '';
-            document.getElementById('menuOverlay').classList.remove('active');
+    // 連番設定ボタン
+    document.getElementById('setSerialNumber').addEventListener('click', function() {
+        const newSerial = document.getElementById('menuSerialNumber').value;
+        if (newSerial && parseInt(newSerial) > 0) {
+            document.getElementById('serialNumber').value = newSerial;
+            saveSerialNumber(newSerial);
+            updateSerialDisplay();
+            updatePreview();
+            showMessage('連番を ' + newSerial + ' に設定しました', 'success');
+            document.getElementById('menuSerialNumber').value = '';
         } else {
             showMessage('有効な連番を入力してください', 'error');
         }
     });
     
-    // 連番の変更を監視してLocalStorageに保存
-    document.getElementById('serialNumber').addEventListener('input', function() {
-        const value = parseInt(this.value) || 1;
-        saveSerialNumber(value);
-        updateMenuSerialDisplay();
+    // 連番リセットボタン
+    document.getElementById('resetSerialNumber').addEventListener('click', function() {
+        if (confirm('連番を1にリセットしますか？')) {
+            document.getElementById('serialNumber').value = 1;
+            saveSerialNumber(1);
+            updateSerialDisplay();
+            updatePreview();
+            showMessage('連番を1にリセットしました', 'success');
+        }
     });
     
+    // 連番が変更されたら自動保存
+    document.getElementById('serialNumber').addEventListener('change', function() {
+        saveSerialNumber(this.value);
+        updateSerialDisplay();
+    });
     // 稼働方式の切り替え
     document.getElementById('operationType').addEventListener('change', function() {
         const otherGroup = document.getElementById('otherOperationGroup');
@@ -289,38 +280,38 @@ function printWithPrintAssist(serialNumber, modelNumber, operation, purchasePric
             xml += `<text>${escapeXml(operation)}&#10;&#10;</text>`;
         }
         
-        // 購入価格（入力がある場合のみ）- ¥を&#165;で表示
+        // 購入価格（入力がある場合のみ）
         if (purchasePrice) {
             const priceNum = Number(purchasePrice);
             if (priceNum >= 100000) {
                 // 10万以上は2行
                 xml += `<text>購入価格&#10;</text>`;
-                xml += `<text>&#165;${priceNum.toLocaleString()}-&#10;</text>`;
+                xml += `<text>¥${priceNum.toLocaleString()}-&#10;</text>`;
             } else {
-                xml += `<text>購入価格&#165;${priceNum.toLocaleString()}-&#10;</text>`;
+                xml += `<text>購入価格¥${priceNum.toLocaleString()}-&#10;</text>`;
             }
         }
         
-        // 電池代（入力がある場合のみ）- ¥を&#165;で表示
+        // 電池代（入力がある場合のみ）
         if (batteryCost) {
-            xml += `<text>電池代&#165;${Number(batteryCost).toLocaleString()}-&#10;</text>`;
+            xml += `<text>電池代¥${Number(batteryCost).toLocaleString()}-&#10;</text>`;
         }
         
-        // ベルト代（入力がある場合のみ）- ¥を&#165;で表示
+        // ベルト代（入力がある場合のみ）
         if (beltCost) {
-            xml += `<text>ベルト代&#165;${Number(beltCost).toLocaleString()}-&#10;</text>`;
+            xml += `<text>ベルト代¥${Number(beltCost).toLocaleString()}-&#10;</text>`;
         }
         
         xml += '<text>&#10;</text>'; // 空行
         
-        // 希望金額（9万以上で2行）- ¥を&#165;で表示
+        // 希望金額（9万以上で2行）
         const desiredNum = Number(desiredPrice);
         xml += '<text width="2" height="2" em="true"/>';
         if (desiredNum >= 90000) {
             xml += `<text>希望金額&#10;</text>`;
-            xml += `<text>&#165;${desiredNum.toLocaleString()}-&#10;&#10;</text>`;
+            xml += `<text>¥${desiredNum.toLocaleString()}-&#10;&#10;</text>`;
         } else {
-            xml += `<text>希望金額&#165;${desiredNum.toLocaleString()}-&#10;&#10;</text>`;
+            xml += `<text>希望金額¥${desiredNum.toLocaleString()}-&#10;&#10;</text>`;
         }
         
         // 日時
@@ -372,13 +363,13 @@ function printWithPrintAssist(serialNumber, modelNumber, operation, purchasePric
         
         console.log('=== PrintAssist起動処理完了 ===');
         
-        // 連番を自動的に1増やしてLocalStorageに保存
+        // 連番を自動的に1増やして保存
         setTimeout(function() {
             const newSerial = parseInt(serialNumber) + 1;
             document.getElementById('serialNumber').value = newSerial;
             saveSerialNumber(newSerial);
+            updateSerialDisplay();
             updatePreview();
-            updateMenuSerialDisplay();
             showMessage('印刷データを送信しました。PrintAssistアプリで確認してください。', 'success');
         }, 2000);
         
