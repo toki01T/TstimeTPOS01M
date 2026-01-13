@@ -22,7 +22,7 @@ function loadSerialNumber() {
 }
 
 function updateSerialDisplay() {
-    const currentSerial = loadSerialNumber();
+    const currentSerial = document.getElementById('serialNumber').value;
     const display = document.getElementById('currentSerial');
     if (display) {
         display.textContent = currentSerial;
@@ -34,7 +34,7 @@ document.addEventListener('DOMContentLoaded', function() {
     // URLパラメータから値札データを読み込む
     loadFromURL();
     
-    // 保存された連番を読み込む（内部管理）
+    // 保存された連番を読み込む（内部管理のみ）
     const savedSerial = loadSerialNumber();
     console.log('保存された連番を読み込みました:', savedSerial);
     
@@ -125,9 +125,27 @@ document.addEventListener('DOMContentLoaded', function() {
     document.getElementById('otherCategory').addEventListener('input', updatePreview);
     
     // リアルタイムプレビューの設定
-    document.getElementById('modelNumber').addEventListener('input', function() {
-        autoLineBreak(this, 17);
+    const modelNumberField = document.getElementById('modelNumber');
+    
+    // 型番の自由編集（手動改行可能）
+    modelNumberField.addEventListener('input', function() {
         updatePreview();
+    });
+    
+    // Enterキーで手動改行（17文字超過時は自動改行も行う）
+    modelNumberField.addEventListener('keydown', function(e) {
+        if (e.key === 'Enter') {
+            // Enterキーで手動改行を許可
+            return;
+        }
+    });
+    
+    // 貼り付け時に17文字で自動改行
+    modelNumberField.addEventListener('paste', function(e) {
+        setTimeout(() => {
+            autoLineBreakForPaste(this, 17);
+            updatePreview();
+        }, 10);
     });
     document.getElementById('purchasePrice').addEventListener('input', updatePreview);
     document.getElementById('batteryCost').addEventListener('input', updatePreview);
@@ -311,19 +329,14 @@ function printWithPrintAssist(serialNumber, modelNumber, category, operation, pu
         xml += '<epos-print xmlns="http://www.epson-pos.com/schemas/2011/03/epos-print">';
         xml += '<text lang="ja"/>'; // 日本語設定
         
-        // ヘッダー行: T's time（左寄せ）　連番（右寄せ）
+        // ヘッダー行: T's time（左）　連番（右）- スペースで右寄せ調整
         xml += '<text width="2" height="1" em="true"/>';
-        xml += '<text align="left"/>';
-        xml += `<text>T&apos;s time</text>`;
-        xml += '<text reverse="true"/>';
-        xml += '<text align="right"/>';
-        const serialHalfWidth = serialNumber.padStart(5, '0');
-        xml += `<text>${serialHalfWidth}&#10;</text>`;
-        xml += '<text reverse="false"/>';
-        xml += '<text>&#10;</text>';
-        
-        // 中央揃えに戻す
         xml += '<text align="center"/>';
+        const serialHalfWidth = serialNumber.padStart(5, '0');
+        // 58mm用紙でwidth="2"の場合、1行約16文字
+        // "T's time"（8文字）+ 3スペース + "00001"（5文字）= 16文字
+        const headerLine = `T&apos;s time   ${serialHalfWidth}`;
+        xml += `<text>${headerLine}&#10;&#10;</text>`;
         
         // カテゴリー表示（中央揃え）
         xml += '<text width="1" height="1" em="false"/>';
@@ -331,9 +344,12 @@ function printWithPrintAssist(serialNumber, modelNumber, category, operation, pu
             xml += `<text>${escapeXml(category)}&#10;&#10;</text>`;
         }
         
-        // 型番（中央揃え・17文字で自動改行）
+        // 型番（中央揃え・手動改行対応）
         xml += '<text align="center"/>';
-        const modelLines = splitText(modelNumber, 17);
+        // 手動改行があればそれを尊重、なけれは17文字で自動分割
+        const modelLines = modelNumber.includes('\n') 
+            ? modelNumber.split('\n') 
+            : splitText(modelNumber, 17);
         for (let line of modelLines) {
             xml += `<text>${escapeXml(line)}&#10;</text>`;
         }
@@ -484,6 +500,25 @@ function autoLineBreak(textarea, maxCharsPerLine) {
     // カーソル位置を調整
     const newCursorPos = Math.min(cursorPos, formatted.length);
     textarea.setSelectionRange(newCursorPos, newCursorPos);
+}
+
+// 貼り付け時の自動改行処理（手動改行を保持しながら17文字超過行を分割）
+function autoLineBreakForPaste(textarea, maxCharsPerLine) {
+    const lines = textarea.value.split('\n');
+    let formatted = [];
+    
+    for (let line of lines) {
+        if (line.length > maxCharsPerLine) {
+            // 17文字を超える行は分割
+            for (let i = 0; i < line.length; i += maxCharsPerLine) {
+                formatted.push(line.substring(i, i + maxCharsPerLine));
+            }
+        } else {
+            formatted.push(line);
+        }
+    }
+    
+    textarea.value = formatted.join('\n');
 }
 
 // 半角数字を全角数字に変換
