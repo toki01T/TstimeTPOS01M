@@ -154,7 +154,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
 // プレビュー更新関数
 function updatePreview() {
-    const serialNumber = document.getElementById('serialNumber').value || '1';
+    const serialNumber = loadSerialNumber().toString();
     const modelNumber = document.getElementById('modelNumber').value || '-';
     const categoryType = document.getElementById('categoryType').value;
     const otherCategory = document.getElementById('otherCategory').value;
@@ -243,7 +243,7 @@ function generateBarcode(text) {
 
 // 印刷関数
 function printLabel() {
-    const serialNumber = document.getElementById('serialNumber').value;
+    const serialNumber = loadSerialNumber().toString();
     const modelNumber = document.getElementById('modelNumber').value;
     const categoryType = document.getElementById('categoryType').value;
     const otherCategory = document.getElementById('otherCategory').value;
@@ -321,13 +321,16 @@ function printWithPrintAssist(serialNumber, modelNumber, category, operation, pu
         xml += '<epos-print xmlns="http://www.epson-pos.com/schemas/2011/03/epos-print">';
         xml += '<text lang="ja"/>'; // 日本語設定
         
-        // ヘッダー行: T's time（左）　連番（右）- 半角でスペース調整
+        // ヘッダー行: T's time（左寄せ）　連番（右寄せ）
         xml += '<text width="2" height="1" em="true"/>';
+        xml += '<text align="left"/>';
+        xml += `<text>T&apos;s time</text>`;
+        xml += '<text reverse="true"/>';
+        xml += '<text align="right"/>';
         const serialHalfWidth = serialNumber.padStart(5, '0');
-        // 58mm用紙ではwidth="2"の場合、1行約16文字
-        // "T's time"（8文字）+ スペース + "00000"（5文字）= 13文字
-        const headerLine = `T&apos;s time     ${serialHalfWidth}`;
-        xml += `<text>${headerLine}&#10;&#10;</text>`;
+        xml += `<text>${serialHalfWidth}&#10;</text>`;
+        xml += '<text reverse="false"/>';
+        xml += '<text>&#10;</text>';
         
         // 中央揃えに戻す
         xml += '<text align="center"/>';
@@ -440,7 +443,6 @@ function printWithPrintAssist(serialNumber, modelNumber, category, operation, pu
         // 連番を自動的に1増やして保存
         setTimeout(function() {
             const newSerial = parseInt(serialNumber) + 1;
-            document.getElementById('serialNumber').value = newSerial;
             saveSerialNumber(newSerial);
             updateSerialDisplay();
             updatePreview();
@@ -879,6 +881,14 @@ function showHistoryModal() {
         historyList.innerHTML = '';
         
         history.forEach((item, index) => {
+            // ラッパーを作成
+            const wrapper = document.createElement('div');
+            wrapper.className = 'history-item-wrapper';
+            
+            // コンテナ（スワイプ用）
+            const container = document.createElement('div');
+            container.className = 'history-item-container';
+            
             const historyItem = document.createElement('div');
             historyItem.className = 'history-item';
             
@@ -898,13 +908,61 @@ function showHistoryModal() {
                 </div>
             `;
             
-            // クリックでフォームに復元
-            historyItem.addEventListener('click', function() {
-                loadFromHistory(item);
-                closeHistoryModal();
+            // 削除ボタン
+            const deleteBtn = document.createElement('button');
+            deleteBtn.className = 'history-delete-btn';
+            deleteBtn.textContent = '削除';
+            deleteBtn.addEventListener('click', function(e) {
+                e.stopPropagation();
+                deleteHistoryItem(index);
             });
             
-            historyList.appendChild(historyItem);
+            // クリックでフォームに復元
+            historyItem.addEventListener('click', function(e) {
+                if (!container.classList.contains('swiped')) {
+                    loadFromHistory(item);
+                    closeHistoryModal();
+                }
+            });
+            
+            // スワイプ処理
+            let startX = 0;
+            let currentX = 0;
+            let isDragging = false;
+            
+            historyItem.addEventListener('touchstart', function(e) {
+                startX = e.touches[0].clientX;
+                isDragging = true;
+            });
+            
+            historyItem.addEventListener('touchmove', function(e) {
+                if (!isDragging) return;
+                currentX = e.touches[0].clientX;
+                const diff = startX - currentX;
+                
+                if (diff > 0 && diff < 100) {
+                    container.style.transform = `translateX(-${diff}px)`;
+                }
+            });
+            
+            historyItem.addEventListener('touchend', function(e) {
+                if (!isDragging) return;
+                isDragging = false;
+                
+                const diff = startX - currentX;
+                if (diff > 50) {
+                    container.style.transform = 'translateX(-80px)';
+                    container.classList.add('swiped');
+                } else {
+                    container.style.transform = 'translateX(0)';
+                    container.classList.remove('swiped');
+                }
+            });
+            
+            container.appendChild(historyItem);
+            container.appendChild(deleteBtn);
+            wrapper.appendChild(container);
+            historyList.appendChild(wrapper);
         });
     }
     
@@ -919,6 +977,23 @@ function closeHistoryModal() {
     
     modal.classList.remove('active');
     overlay.classList.remove('active');
+}
+
+// 履歴アイテムを削除
+function deleteHistoryItem(index) {
+    if (confirm('この履歴を削除しますか？')) {
+        try {
+            const history = getHistory();
+            history.splice(index, 1);
+            localStorage.setItem('printHistory', JSON.stringify(history));
+            showMessage('履歴を削除しました', 'success');
+            // 履歴モーダルを再表示
+            showHistoryModal();
+        } catch (error) {
+            console.error('履歴削除エラー:', error);
+            showMessage('履歴の削除に失敗しました', 'error');
+        }
+    }
 }
 
 // 履歴からフォームに読み込む
