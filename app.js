@@ -127,8 +127,10 @@ document.addEventListener('DOMContentLoaded', function() {
     // リアルタイムプレビューの設定
     const modelNumberField = document.getElementById('modelNumber');
     
-    // 型番の自由編集（手動改行可能）
-    modelNumberField.addEventListener('input', function() {
+    // 型番の自由編集（手動改行可能、自動改行も行う）
+    modelNumberField.addEventListener('input', function(e) {
+        // 17文字ごとに自動改行（手動改行も考慮）
+        autoLineBreakSmart(this, 17);
         updatePreview();
     });
     
@@ -394,6 +396,12 @@ function printWithPrintAssist(serialNumber, modelNumber, category, operation, pu
             xml += `<text>希望金額${desiredNum.toLocaleString()}円&#10;&#10;</text>`;
         }
         
+        // 注意文
+        xml += '<text width="1" height="1" em="false"/>';
+        xml += '<text>﹡大幅に金額が離れている場合は&#10;</text>';
+        xml += '<text>お売りする事が出来ません。&#10;</text>';
+        xml += '<text>ご了承下さい。&#10;&#10;</text>';
+        
         // 日時
         xml += '<text width="1" height="1" em="false"/>';
         xml += `<text>${escapeXml(dateString)}&#10;&#10;</text>`;
@@ -519,6 +527,35 @@ function autoLineBreakForPaste(textarea, maxCharsPerLine) {
     }
     
     textarea.value = formatted.join('\n');
+}
+
+// スマートな自動改行（手動改行を保持しつつ、17文字超過を自動分割）
+function autoLineBreakSmart(textarea, maxCharsPerLine) {
+    const cursorPos = textarea.selectionStart;
+    const lines = textarea.value.split('\n');
+    let formatted = [];
+    let totalChars = 0;
+    
+    for (let i = 0; i < lines.length; i++) {
+        const line = lines[i];
+        
+        if (line.length > maxCharsPerLine) {
+            // 17文字を超える行は自動分割
+            for (let j = 0; j < line.length; j += maxCharsPerLine) {
+                formatted.push(line.substring(j, j + maxCharsPerLine));
+            }
+        } else {
+            formatted.push(line);
+        }
+    }
+    
+    const newValue = formatted.join('\n');
+    if (textarea.value !== newValue) {
+        textarea.value = newValue;
+        // カーソル位置を調整
+        const newCursorPos = Math.min(cursorPos, newValue.length);
+        textarea.setSelectionRange(newCursorPos, newCursorPos);
+    }
 }
 
 // 半角数字を全角数字に変換
