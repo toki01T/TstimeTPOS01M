@@ -710,7 +710,6 @@ main {
     overflow-x: hidden;
     padding: 15px;
     -webkit-overflow-scrolling: touch;
-    max-height: calc(80vh - 80px);
 }
 
 .no-history {
@@ -720,17 +719,14 @@ main {
     font-size: 1.1em;
 }
 
-/* 履歴アイテムラッパー */
 .history-item-wrapper {
     position: relative;
     margin-bottom: 12px;
     overflow: hidden;
-    border-radius: 8px;
 }
 
 .history-item-container {
     position: relative;
-    display: flex;
     transition: transform 0.3s ease;
 }
 
@@ -741,26 +737,29 @@ main {
     padding: 15px;
     cursor: pointer;
     transition: all 0.3s;
-    flex-shrink: 0;
-    width: 100%;
+    position: relative;
+    z-index: 1;
 }
 
-.history-delete-btn {
+.history-item.swiping {
+    cursor: grab;
+}
+
+.delete-button {
     position: absolute;
-    right: 0;
     top: 0;
-    height: 100%;
+    right: 0;
+    bottom: 0;
     width: 80px;
     background: #e74c3c;
     color: white;
-    border: none;
     display: flex;
     align-items: center;
     justify-content: center;
     font-weight: bold;
-    font-size: 1em;
-    cursor: pointer;
+    font-size: 0.9em;
     border-radius: 0 8px 8px 0;
+    z-index: 0;
 }
 
 .history-item:hover {

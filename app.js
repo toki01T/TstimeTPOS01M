@@ -863,6 +863,18 @@ function getHistory() {
     }
 }
 
+// 履歴アイテムを削除
+function deleteHistoryItem(index) {
+    try {
+        const history = getHistory();
+        history.splice(index, 1);
+        localStorage.setItem('printHistory', JSON.stringify(history));
+        console.log('履歴を削除しました:', index);
+    } catch (error) {
+        console.error('履歴削除エラー:', error);
+    }
+}
+
 // 履歴モーダルを表示
 function showHistoryModal() {
     const modal = document.getElementById('historyModal');
@@ -881,11 +893,9 @@ function showHistoryModal() {
         historyList.innerHTML = '';
         
         history.forEach((item, index) => {
-            // ラッパーを作成
             const wrapper = document.createElement('div');
             wrapper.className = 'history-item-wrapper';
             
-            // コンテナ（スワイプ用）
             const container = document.createElement('div');
             container.className = 'history-item-container';
             
@@ -909,23 +919,11 @@ function showHistoryModal() {
             `;
             
             // 削除ボタン
-            const deleteBtn = document.createElement('button');
-            deleteBtn.className = 'history-delete-btn';
-            deleteBtn.textContent = '削除';
-            deleteBtn.addEventListener('click', function(e) {
-                e.stopPropagation();
-                deleteHistoryItem(index);
-            });
+            const deleteButton = document.createElement('div');
+            deleteButton.className = 'delete-button';
+            deleteButton.textContent = '削除';
             
-            // クリックでフォームに復元
-            historyItem.addEventListener('click', function(e) {
-                if (!container.classList.contains('swiped')) {
-                    loadFromHistory(item);
-                    closeHistoryModal();
-                }
-            });
-            
-            // スワイプ処理
+            // スワイプ削除機能
             let startX = 0;
             let currentX = 0;
             let isDragging = false;
@@ -933,35 +931,59 @@ function showHistoryModal() {
             historyItem.addEventListener('touchstart', function(e) {
                 startX = e.touches[0].clientX;
                 isDragging = true;
+                historyItem.classList.add('swiping');
             });
             
             historyItem.addEventListener('touchmove', function(e) {
                 if (!isDragging) return;
                 currentX = e.touches[0].clientX;
-                const diff = startX - currentX;
+                const deltaX = currentX - startX;
                 
-                if (diff > 0 && diff < 100) {
-                    container.style.transform = `translateX(-${diff}px)`;
+                // 左にスワイプした場合のみ
+                if (deltaX < 0) {
+                    const moveX = Math.max(deltaX, -80);
+                    container.style.transform = `translateX(${moveX}px)`;
                 }
             });
             
             historyItem.addEventListener('touchend', function(e) {
                 if (!isDragging) return;
                 isDragging = false;
+                historyItem.classList.remove('swiping');
                 
-                const diff = startX - currentX;
-                if (diff > 50) {
+                const deltaX = currentX - startX;
+                
+                // 40px以上左にスワイプしたら削除ボタンを表示
+                if (deltaX < -40) {
                     container.style.transform = 'translateX(-80px)';
-                    container.classList.add('swiped');
                 } else {
                     container.style.transform = 'translateX(0)';
-                    container.classList.remove('swiped');
                 }
             });
             
+            // 削除ボタンクリック
+            deleteButton.addEventListener('click', function(e) {
+                e.stopPropagation();
+                if (confirm('この履歴を削除しますか？')) {
+                    deleteHistoryItem(index);
+                    showHistoryModal(); // 再読み込み
+                }
+            });
+            
+            // クリックでフォームに復元
+            historyItem.addEventListener('click', function(e) {
+                // スワイプ中はクリックを無効化
+                if (container.style.transform && container.style.transform !== 'translateX(0px)') {
+                    container.style.transform = 'translateX(0)';
+                    return;
+                }
+                loadFromHistory(item);
+                closeHistoryModal();
+            });
+            
             container.appendChild(historyItem);
-            container.appendChild(deleteBtn);
             wrapper.appendChild(container);
+            wrapper.appendChild(deleteButton);
             historyList.appendChild(wrapper);
         });
     }
@@ -977,23 +999,6 @@ function closeHistoryModal() {
     
     modal.classList.remove('active');
     overlay.classList.remove('active');
-}
-
-// 履歴アイテムを削除
-function deleteHistoryItem(index) {
-    if (confirm('この履歴を削除しますか？')) {
-        try {
-            const history = getHistory();
-            history.splice(index, 1);
-            localStorage.setItem('printHistory', JSON.stringify(history));
-            showMessage('履歴を削除しました', 'success');
-            // 履歴モーダルを再表示
-            showHistoryModal();
-        } catch (error) {
-            console.error('履歴削除エラー:', error);
-            showMessage('履歴の削除に失敗しました', 'error');
-        }
-    }
 }
 
 // 履歴からフォームに読み込む
