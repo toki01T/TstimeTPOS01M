@@ -134,7 +134,6 @@ document.addEventListener('DOMContentLoaded', function() {
     document.getElementById('otherCategory').addEventListener('input', updatePreview);
     
     // リアルタイムプレビューの設定
-    document.getElementById('serialNumber').addEventListener('input', updatePreview);
     document.getElementById('modelNumber').addEventListener('input', function() {
         autoLineBreak(this, 17);
         updatePreview();
