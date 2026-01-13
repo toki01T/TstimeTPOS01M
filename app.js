@@ -321,13 +321,13 @@ function printWithPrintAssist(serialNumber, modelNumber, category, operation, pu
         xml += '<epos-print xmlns="http://www.epson-pos.com/schemas/2011/03/epos-print">';
         xml += '<text lang="ja"/>'; // 日本語設定
         
-        // ヘッダー行: T's time（左寄せ・半角）　連番（右寄せ・半角）
+        // ヘッダー行: T's time（左）　連番（右）- 半角でスペース調整
         xml += '<text width="2" height="1" em="true"/>';
-        xml += '<text align="left"/>';
-        xml += `<text>T&apos;s time</text>`;
-        xml += '<text align="right"/>';
         const serialHalfWidth = serialNumber.padStart(5, '0');
-        xml += `<text>${serialHalfWidth}&#10;&#10;</text>`;
+        // 58mm用紙ではwidth="2"の場合、1行約16文字
+        // "T's time"（8文字）+ スペース + "00000"（5文字）= 13文字
+        const headerLine = `T&apos;s time     ${serialHalfWidth}`;
+        xml += `<text>${headerLine}&#10;&#10;</text>`;
         
         // 中央揃えに戻す
         xml += '<text align="center"/>';
@@ -389,8 +389,8 @@ function printWithPrintAssist(serialNumber, modelNumber, category, operation, pu
         xml += '<text width="1" height="1" em="false"/>';
         xml += `<text>${escapeXml(dateString)}&#10;&#10;</text>`;
         
-        // QRコード（データURL）
-        xml += `<symbol type="qrcode_model_2" level="h" width="5" height="0" size="0">${escapeXml(dataURL)}</symbol>`;
+        // QRコード（データURL）- サイズを小さく
+        xml += `<symbol type="qrcode_model_2" level="h" width="3" height="0" size="0">${escapeXml(dataURL)}</symbol>`;
         xml += `<text>&#10;${qrcodeNumber}&#10;</text>`;
         xml += '<feed line="2"/>';
         xml += '<cut type="feed"/>';
@@ -811,6 +811,10 @@ function loadFromURL() {
         }
         
         showMessage('QRコードから値札データを読み込みました', 'success');
+        
+        // URLパラメータをクリアして、再読み込み時に再度読み込まれるのを防ぐ
+        const cleanURL = window.location.origin + window.location.pathname;
+        window.history.replaceState({}, document.title, cleanURL);
     }
 }
 
