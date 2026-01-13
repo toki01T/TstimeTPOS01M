@@ -162,93 +162,9 @@ document.addEventListener('DOMContentLoaded', function() {
     updatePreview();
 });
 
-// プレビュー更新関数
+// プレビュー更新関数（プレビュー表示は削除されたが、内部処理のため残す）
 function updatePreview() {
-    const serialNumber = loadSerialNumber().toString();
-    const modelNumber = document.getElementById('modelNumber').value || '-';
-    const categoryType = document.getElementById('categoryType').value;
-    const otherCategory = document.getElementById('otherCategory').value;
-    const operationType = document.getElementById('operationType').value;
-    const otherOperation = document.getElementById('otherOperation').value;
-    const purchasePrice = document.getElementById('purchasePrice').value;
-    const batteryCost = document.getElementById('batteryCost').value;
-    const beltCost = document.getElementById('beltCost').value;
-    const desiredPrice = document.getElementById('desiredPrice').value;
-    
-    // 連番表示（5桁）
-    document.getElementById('previewSerial').textContent = serialNumber.padStart(5, '0');
-    
-    // カテゴリー表示
-    let categoryText = '-';
-    if (categoryType === 'other' && otherCategory) {
-        categoryText = otherCategory;
-    } else if (categoryType !== 'other') {
-        categoryText = categoryType;
-    }
-    document.getElementById('previewCategory').textContent = categoryText;
-    
-    // 型番表示（17文字で改行）
-    document.getElementById('previewModel').textContent = modelNumber;
-    
-    // 稼働方式表示
-    let operationText = '-';
-    if (operationType === 'other' && otherOperation) {
-        operationText = otherOperation;
-    } else if (operationType !== 'other') {
-        operationText = operationType;
-    }
-    document.getElementById('previewOperation').textContent = operationText;
-    
-    // 価格表示
-    document.getElementById('previewPurchase').textContent = purchasePrice ? `¥${Number(purchasePrice).toLocaleString()}-` : '¥-';
-    document.getElementById('previewBattery').textContent = batteryCost ? `¥${Number(batteryCost).toLocaleString()}-` : '¥-';
-    document.getElementById('previewBelt').textContent = beltCost ? `¥${Number(beltCost).toLocaleString()}-` : '¥-';
-    document.getElementById('previewPrice').textContent = desiredPrice ? `¥${Number(desiredPrice).toLocaleString()}-` : '¥-';
-    
-    // 日時表示（秒を含む）
-    const now = new Date();
-    const dateString = `${now.getFullYear()}年${(now.getMonth()+1).toString().padStart(2,'0')}月${now.getDate().toString().padStart(2,'0')}日 ${now.getHours().toString().padStart(2,'0')}:${now.getMinutes().toString().padStart(2,'0')} ${now.getSeconds().toString().padStart(2,'0')}秒`;
-    document.getElementById('previewDate').textContent = dateString;
-    
-    // バーコード番号生成（YYYYMMDD + 連番5桁）
-    const barcodeNumber = `${now.getFullYear()}${(now.getMonth()+1).toString().padStart(2,'0')}${now.getDate().toString().padStart(2,'0')}${serialNumber.padStart(5, '0')}`;
-    document.getElementById('barcodeText').textContent = barcodeNumber;
-    
-    // バーコード生成
-    generateBarcode(barcodeNumber);
-}
-
-// バーコード生成関数（シンプルなバー表示）
-function generateBarcode(text) {
-    const svg = document.getElementById('barcode');
-    svg.innerHTML = '';
-    
-    if (!text || text === '-') return;
-    
-    // SVG設定
-    svg.setAttribute('width', '250');
-    svg.setAttribute('height', '80');
-    svg.setAttribute('xmlns', 'http://www.w3.org/2000/svg');
-    
-    // シンプルなバーコード風表示
-    const barWidth = 3;
-    const spacing = 2;
-    let x = 10;
-    
-    for (let i = 0; i < text.length; i++) {
-        const digit = parseInt(text[i]);
-        const height = 40 + (digit * 3);
-        
-        const rect = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
-        rect.setAttribute('x', x);
-        rect.setAttribute('y', 10);
-        rect.setAttribute('width', barWidth);
-        rect.setAttribute('height', height);
-        rect.setAttribute('fill', '#000');
-        svg.appendChild(rect);
-        
-        x += barWidth + spacing;
-    }
+    // この関数は内部処理用に残しますが、プレビュー表示は行いません
 }
 
 // 印刷関数
@@ -391,11 +307,14 @@ function printWithPrintAssist(serialNumber, modelNumber, category, operation, pu
         xml += '<text width="2" height="2" em="true"/>';
         xml += `<text>${desiredNum.toLocaleString()}円&#10;&#10;</text>`;
         
-        // 注意文
-        xml += '<text width="1" height="1" em="false"/>';
-        xml += '<text>﹡大幅に金額が離れている場合は&#10;</text>';
-        xml += '<text>お売りする事が出来ません。&#10;</text>';
-        xml += '<text>ご了承下さい。&#10;&#10;</text>';
+        // 注意文（トグルスイッチがONの場合のみ印刷）
+        const printNotice = document.getElementById('printNotice').checked;
+        if (printNotice) {
+            xml += '<text width="1" height="1" em="false"/>';
+            xml += '<text>﹡大幅に金額が離れている場合は&#10;</text>';
+            xml += '<text>お売りする事が出来ません。&#10;</text>';
+            xml += '<text>ご了承下さい。&#10;&#10;</text>';
+        }
         
         // 日時
         xml += '<text width="1" height="1" em="false"/>';

@@ -127,49 +127,17 @@
                     <input type="number" id="desiredPrice" placeholder="例: 8000">
                 </div>
 
-            </div>
-
-            <div class="preview-section">
-                <h2>プレビュー</h2>
-                <div class="preview-card" id="preview">
-                    <div class="preview-header-line">
-                        <span class="store-name">T's time</span>
-                        <span class="serial-number" id="previewSerial">00001</span>
-                    </div>
-                    
-                    <div class="preview-category" id="previewCategory">-</div>
-                    
-                    <div class="preview-model" id="previewModel">-</div>
-                    
-                    <div class="preview-operation" id="previewOperation">-</div>
-                    
-                    <div class="preview-line">
-                        <span class="label">購入価格</span>
-                        <span class="value" id="previewPurchase">￥-</span>
-                    </div>
-                    
-                    <div class="preview-line">
-                        <span class="label">電池代</span>
-                        <span class="value" id="previewBattery">￥-</span>
-                    </div>
-                    
-                    <div class="preview-line">
-                        <span class="label">ベルト代</span>
-                        <span class="value" id="previewBelt">￥-</span>
-                    </div>
-                    
-                    <div class="preview-desired-price">
-                        <div class="label">希望金額</div>
-                        <div class="value" id="previewPrice">￥-</div>
-                    </div>
-                    
-                    <div class="preview-datetime" id="previewDate">-</div>
-                    
-                    <div class="barcode-section">
-                        <svg id="barcode"></svg>
-                        <div class="barcode-text" id="barcodeText">-</div>
-                    </div>
+                <div class="form-group toggle-group">
+                    <label class="toggle-label">
+                        <span class="toggle-text">離れ印刷</span>
+                        <div class="toggle-switch">
+                            <input type="checkbox" id="printNotice" checked>
+                            <span class="toggle-slider"></span>
+                        </div>
+                    </label>
+                    <small class="toggle-hint">※大幅に金額が離れている場合はお売りする事が出来ません。ご了承下さい。</small>
                 </div>
+
             </div>
 
             <div class="button-section">
