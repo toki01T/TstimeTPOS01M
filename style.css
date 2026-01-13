@@ -285,6 +285,13 @@ main {
     border-color: #2196F3;
 }
 
+.input-hint {
+    display: block;
+    margin-top: 5px;
+    font-size: 0.85em;
+    color: #999;
+}
+
 .preview-card {
     background: white;
     border: 2px solid #ddd;
