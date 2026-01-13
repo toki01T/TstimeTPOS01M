@@ -49,6 +49,21 @@
                 </div>
 
                 <div class="form-group">
+                    <label for="watchCategory">カテゴリ:</label>
+                    <select id="watchCategory">
+                        <option value="メンズ腕時計">メンズ腕時計</option>
+                        <option value="ボーイズ腕時計">ボーイズ腕時計</option>
+                        <option value="レディース腕時計">レディース腕時計</option>
+                        <option value="other_category">その他（自由記入）</option>
+                    </select>
+                </div>
+
+                <div class="form-group" id="otherCategoryGroup" style="display: none;">
+                    <label for="otherCategory">その他のカテゴリ:</label>
+                    <input type="text" id="otherCategory" placeholder="カテゴリを入力" maxlength="30">
+                </div>
+
+                <div class="form-group">
                     <label for="modelNumber">型番:</label>
                     <input type="text" id="modelNumber" placeholder="例: ABC-123" maxlength="70">
                 </div>
@@ -62,6 +77,9 @@
                         <option value="ソーラー「稼働」">ソーラー「稼働」</option>
                         <option value="ソーラー「未稼働」">ソーラー「未稼働」</option>
                         <option value="ソーラー「不動」">ソーラー「不動」</option>
+                        <option value="ソーラー電波「稼働」">ソーラー電波「稼働」</option>
+                        <option value="ソーラー電波「未稼働」">ソーラー電波「未稼働」</option>
+                        <option value="ソーラー電波「不動」">ソーラー電波「不動」</option>
                         <option value="自動巻き「稼働」">自動巻き「稼働」</option>
                         <option value="自動巻き「未稼働」">自動巻き「未稼働」</option>
                         <option value="自動巻き「不動」">自動巻き「不動」</option>
@@ -106,6 +124,8 @@
                         <span class="store-name">T's time</span>
                         <span class="serial-number" id="previewSerial">00001</span>
                     </div>
+                    
+                    <div class="preview-category" id="previewCategory">-</div>
                     
                     <div class="preview-model" id="previewModel">-</div>
                     

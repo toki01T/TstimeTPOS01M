@@ -102,6 +102,19 @@ document.addEventListener('DOMContentLoaded', function() {
     
     document.getElementById('otherOperation').addEventListener('input', updatePreview);
     
+    // カテゴリの切り替え
+    document.getElementById('watchCategory').addEventListener('change', function() {
+        const otherCategoryGroup = document.getElementById('otherCategoryGroup');
+        if (this.value === 'other_category') {
+            otherCategoryGroup.style.display = 'block';
+        } else {
+            otherCategoryGroup.style.display = 'none';
+        }
+        updatePreview();
+    });
+    
+    document.getElementById('otherCategory').addEventListener('input', updatePreview);
+    
     // リアルタイムプレビューの設定
     document.getElementById('serialNumber').addEventListener('input', updatePreview);
     document.getElementById('modelNumber').addEventListener('input', updatePreview);
@@ -121,6 +134,8 @@ document.addEventListener('DOMContentLoaded', function() {
 // プレビュー更新関数
 function updatePreview() {
     const serialNumber = document.getElementById('serialNumber').value || '1';
+    const watchCategory = document.getElementById('watchCategory').value;
+    const otherCategory = document.getElementById('otherCategory').value;
     const modelNumber = document.getElementById('modelNumber').value || '-';
     const operationType = document.getElementById('operationType').value;
     const otherOperation = document.getElementById('otherOperation').value;
@@ -131,6 +146,15 @@ function updatePreview() {
     
     // 連番表示（5桁）
     document.getElementById('previewSerial').textContent = serialNumber.padStart(5, '0');
+    
+    // カテゴリ表示
+    let categoryText = '-';
+    if (watchCategory === 'other_category' && otherCategory) {
+        categoryText = otherCategory;
+    } else if (watchCategory !== 'other_category') {
+        categoryText = watchCategory;
+    }
+    document.getElementById('previewCategory').textContent = categoryText;
     
     // 型番表示（17文字で改行）
     document.getElementById('previewModel').textContent = modelNumber;
@@ -199,6 +223,8 @@ function generateBarcode(text) {
 // 印刷関数
 function printLabel() {
     const serialNumber = document.getElementById('serialNumber').value;
+    const watchCategory = document.getElementById('watchCategory').value;
+    const otherCategory = document.getElementById('otherCategory').value;
     const modelNumber = document.getElementById('modelNumber').value;
     const operationType = document.getElementById('operationType').value;
     const otherOperation = document.getElementById('otherOperation').value;
@@ -206,6 +232,14 @@ function printLabel() {
     const batteryCost = document.getElementById('batteryCost').value;
     const beltCost = document.getElementById('beltCost').value;
     const desiredPrice = document.getElementById('desiredPrice').value;
+    
+    // カテゴリの取得
+    let category = '';
+    if (watchCategory === 'other_category' && otherCategory) {
+        category = otherCategory;
+    } else if (watchCategory !== 'other_category') {
+        category = watchCategory;
+    }
     
     // 稼働方式の取得
     let operation = '';
@@ -225,7 +259,7 @@ function printLabel() {
     if (isMobileDevice()) {
         // iPad/iPhone: PrintAssist経由
         console.log('モバイルデバイスを検出: PrintAssist印刷を使用');
-        printWithPrintAssist(serialNumber, modelNumber, operation, purchasePrice, batteryCost, beltCost, desiredPrice);
+        printWithPrintAssist(serialNumber, category, modelNumber, operation, purchasePrice, batteryCost, beltCost, desiredPrice);
     } else {
         // PC: ePOS-Print SDK - 現在はモバイル専用のため警告
         showMessage('このアプリはiPad/iPhone専用です。モバイルデバイスで開いてください。', 'error');
@@ -234,9 +268,9 @@ function printLabel() {
 }
 
 // PrintAssist印刷（iPad/iPhone）
-function printWithPrintAssist(serialNumber, modelNumber, operation, purchasePrice, batteryCost, beltCost, desiredPrice) {
+function printWithPrintAssist(serialNumber, category, modelNumber, operation, purchasePrice, batteryCost, beltCost, desiredPrice) {
     console.log('=== PrintAssist印刷開始 ===');
-    console.log('入力データ:', {serialNumber, modelNumber, operation, purchasePrice, batteryCost, beltCost, desiredPrice});
+    console.log('入力データ:', {serialNumber, category, modelNumber, operation, purchasePrice, batteryCost, beltCost, desiredPrice});
     
     // PrintAssistアプリの確認を促す
     if (confirm('PrintAssistアプリで印刷します。\n\nPrintAssistがインストールされていますか？\n\n「OK」= インストール済み（印刷実行）\n「キャンセル」= 未インストール（App Storeへ移動）')) {
@@ -263,9 +297,16 @@ function printWithPrintAssist(serialNumber, modelNumber, operation, purchasePric
         xml += '<text lang="ja"/>'; // 日本語設定
         xml += '<text align="center"/>';
         
-        // ヘッダー行: T's time　　　00001（半角英数字で表示）
-        xml += '<text width="1" height="1" em="false" font="font_a"/>';
-        xml += `<text>T's time          ${serialNumber.padStart(5, '0')}&#10;&#10;</text>`;
+        // ヘッダー行: T's time（半角）　連番（全角）
+        xml += '<text width="2" height="1" em="true"/>';
+        const serialFullWidth = toFullWidth(serialNumber.padStart(5, '0'));
+        xml += `<text>T&apos;s time   ${serialFullWidth}&#10;&#10;</text>`;
+        
+        // カテゴリ（中央揃え）
+        xml += '<text width="1" height="1" em="false"/>';
+        if (category) {
+            xml += `<text>${escapeXml(category)}&#10;&#10;</text>`;
+        }
         
         // 型番（17文字で自動改行）
         const modelLines = splitText(modelNumber, 17);
@@ -279,38 +320,38 @@ function printWithPrintAssist(serialNumber, modelNumber, operation, purchasePric
             xml += `<text>${escapeXml(operation)}&#10;&#10;</text>`;
         }
         
-        // 購入価格（入力がある場合のみ）- 「円」表記
+        // 購入価格（入力がある場合のみ）- 「円」表記、ハイフンなし
         if (purchasePrice) {
             const priceNum = Number(purchasePrice);
             if (priceNum >= 100000) {
                 // 10万以上は2行
                 xml += `<text>購入価格&#10;</text>`;
-                xml += `<text>${priceNum.toLocaleString()}円-&#10;</text>`;
+                xml += `<text>${priceNum.toLocaleString()}円&#10;</text>`;
             } else {
-                xml += `<text>購入価格 ${priceNum.toLocaleString()}円-&#10;</text>`;
+                xml += `<text>購入価格${priceNum.toLocaleString()}円&#10;</text>`;
             }
         }
         
-        // 電池代（入力がある場合のみ）- 「円」表記
+        // 電池代（入力がある場合のみ）- 「円」表記、ハイフンなし
         if (batteryCost) {
-            xml += `<text>電池代 ${Number(batteryCost).toLocaleString()}円-&#10;</text>`;
+            xml += `<text>電池代${Number(batteryCost).toLocaleString()}円&#10;</text>`;
         }
         
-        // ベルト代（入力がある場合のみ）- 「円」表記
+        // ベルト代（入力がある場合のみ）- 「円」表記、ハイフンなし
         if (beltCost) {
-            xml += `<text>ベルト代 ${Number(beltCost).toLocaleString()}円-&#10;</text>`;
+            xml += `<text>ベルト代${Number(beltCost).toLocaleString()}円&#10;</text>`;
         }
         
         xml += '<text>&#10;</text>'; // 空行
         
-        // 希望金額（9万以上で2行）- 「円」表記
+        // 希望金額（9万以上で2行）- 「円」表記、ハイフンなし
         const desiredNum = Number(desiredPrice);
         xml += '<text width="2" height="2" em="true"/>';
         if (desiredNum >= 90000) {
             xml += `<text>希望金額&#10;</text>`;
-            xml += `<text>${desiredNum.toLocaleString()}円-&#10;&#10;</text>`;
+            xml += `<text>${desiredNum.toLocaleString()}円&#10;&#10;</text>`;
         } else {
-            xml += `<text>希望金額 ${desiredNum.toLocaleString()}円-&#10;&#10;</text>`;
+            xml += `<text>希望金額${desiredNum.toLocaleString()}円&#10;&#10;</text>`;
         }
         
         // 日時
@@ -398,6 +439,13 @@ function splitText(text, maxLength) {
         lines.push(text.substring(i, i + maxLength));
     }
     return lines;
+}
+
+// 半角数字を全角数字に変換
+function toFullWidth(str) {
+    return str.replace(/[0-9]/g, function(s) {
+        return String.fromCharCode(s.charCodeAt(0) + 0xFEE0);
+    });
 }
 
 // Bluetooth接続で印刷
@@ -611,6 +659,9 @@ function executePrint(eposDevice, serialNumber, modelNumber, purchasePrice, batt
 
 // フォームクリア関数
 function clearForm() {
+    document.getElementById('watchCategory').selectedIndex = 0;
+    document.getElementById('otherCategory').value = '';
+    document.getElementById('otherCategoryGroup').style.display = 'none';
     document.getElementById('modelNumber').value = '';
     document.getElementById('operationType').selectedIndex = 0;
     document.getElementById('otherOperation').value = '';

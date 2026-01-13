@@ -588,3 +588,15 @@ main {
         padding: 12px;
     }
 }
+
+/* カテゴリ表示のスタイル */
+.preview-category {
+    font-size: 1.1em;
+    color: #2196F3;
+    font-weight: 600;
+    margin: 15px 0;
+    padding: 8px;
+    background: #e3f2fd;
+    border-radius: 5px;
+    text-align: center;
+}
