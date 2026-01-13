@@ -9,7 +9,7 @@
 <body>
     <div class="container">
         <header>
-            <h1>T's time</h1>
+            <h1>T's time 値札印刷システム</h1>
         </header>
 
         <main>
@@ -23,7 +23,7 @@
 
                 <div class="form-group">
                     <label for="modelNumber">型番:</label>
-                    <input type="text" id="modelNumber" placeholder="例: ABC-123" maxlength="68">
+                    <input type="text" id="modelNumber" placeholder="例: ABC-123" maxlength="35">
                 </div>
 
                 <div class="form-group">
@@ -39,16 +39,16 @@
                         <option value="自動巻き「稼働」">自動巻き「稼働」</option>
                         <option value="自動巻き「未稼働」">自動巻き「未稼働」</option>
                         <option value="自動巻き「不動」">自動巻き「不動」</option>
-                        <option value="キネティック(自動巻発電式ｸｫｰﾂ)「稼働」">キネティック(自動巻発電式ｸｫｰﾂ)「稼働」</option>
-                        <option value="キネティック(自動巻発電式ｸｫｰﾂ)「未稼働」">キネティック(自動巻発電式ｸｫｰﾂ)「未稼働」</option>
-                        <option value="キネティック(自動巻発電式ｸｫｰﾂ)「不動」">キネティック(自動巻発電式ｸｫｰﾂ)「不動」</option>
+                        <option value="キネティック「稼働」">キネティック(自動巻発電式ｸｫｰﾂ)「稼働」</option>
+                        <option value="キネティック「未稼働」">キネティック(自動巻発電式ｸｫｰﾂ)「未稼働」</option>
+                        <option value="キネティック「不動」">キネティック(自動巻発電式ｸｫｰﾂ)「不動」</option>
                         <option value="その他">その他（自由記入）</option>
                     </select>
                 </div>
 
                 <div class="form-group" id="otherOperationGroup" style="display: none;">
                     <label for="otherOperation">その他の稼働方式:</label>
-                    <input type="text" id="otherOperation" placeholder="例: 手巻き「稼働」" maxlength="50">
+                    <input type="text" id="otherOperation" placeholder="例: 手巻き「稼働」" maxlength="30">
                 </div>
 
                 <div class="form-group">
@@ -71,7 +71,7 @@
                     <input type="number" id="desiredPrice" placeholder="例: 8000">
                 </div>
 
-                <div class="form-group">
+                <div class="form-group" id="connectionTypeGroup" style="display: none;">
                     <label for="connectionType">接続方法:</label>
                     <select id="connectionType">
                         <option value="bluetooth">Bluetooth</option>
@@ -79,14 +79,14 @@
                     </select>
                 </div>
 
-                <div class="form-group" id="bluetoothGroup">
-                    <input type="hidden" id="printerBT" value="00:01:90:C7:7A:B2">
+                <div class="form-group" id="bluetoothGroup" style="display: none;">
+                    <label for="printerBT">Bluetoothアドレス:</label>
+                    <input type="text" id="printerBT" placeholder="BD_ADDR" value="00:01:90:C7:7A:B2" readonly>
                 </div>
 
                 <div class="form-group" id="networkGroup" style="display: none;">
                     <label for="printerIP">プリンターIPアドレス:</label>
                     <input type="text" id="printerIP" placeholder="例: 192.168.1.100" value="192.168.1.100">
-                    <small style="color: #666; display: block; margin-top: 5px;">WindowsでWi-Fi接続した場合はIPアドレスを入力</small>
                 </div>
             </div>
 
@@ -100,7 +100,7 @@
                     
                     <div class="preview-model" id="previewModel">-</div>
                     
-                    <div class="preview-operation" id="previewOperation" style="text-align: center; margin: 10px 0; font-size: 14px;">-</div>
+                    <div class="preview-operation" id="previewOperation" style="text-align: center; font-size: 14px; margin: 10px 0;">-</div>
                     
                     <div class="preview-line">
                         <span class="label">購入価格</span>
