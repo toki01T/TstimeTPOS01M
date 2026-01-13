@@ -97,19 +97,7 @@ main {
     transition: border-color 0.3s;
 }
 
-.form-group select {
-    width: 100%;
-    padding: 12px;
-    border: 2px solid #ddd;
-    border-radius: 8px;
-    font-size: 1em;
-    transition: border-color 0.3s;
-    background: white;
-    cursor: pointer;
-}
-
-.form-group input:focus,
-.form-group select:focus {
+.form-group input:focus {
     outline: none;
     border-color: #2196F3;
 }
@@ -151,15 +139,19 @@ main {
     padding: 10px;
     word-wrap: break-word;
     line-height: 1.6;
-    white-space: pre-wrap;
+    background: #f0f8ff;
+    border-radius: 5px;
+    color: #333;
 }
 
-.preview-movement {
-    font-size: 1em;
+.preview-operation {
+    font-size: 1.05em;
     color: #2196F3;
-    margin: 15px 0;
+    font-weight: 600;
+    margin: 10px 0 20px 0;
     padding: 8px;
-    font-weight: 500;
+    background: #e3f2fd;
+    border-radius: 5px;
     text-align: center;
 }
 

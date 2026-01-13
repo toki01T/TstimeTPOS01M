@@ -12,34 +12,22 @@ function isMobileDevice() {
 
 // ページ読み込み時の初期化
 document.addEventListener('DOMContentLoaded', function() {
-    // 接続方法の切り替え
-    document.getElementById('connectionType').addEventListener('change', function() {
-        const bluetoothGroup = document.getElementById('bluetoothGroup');
-        const networkGroup = document.getElementById('networkGroup');
-        
-        if (this.value === 'network') {
-            bluetoothGroup.style.display = 'none';
-            networkGroup.style.display = 'block';
+    // 稼働方式の切り替え
+    document.getElementById('operationType').addEventListener('change', function() {
+        const otherGroup = document.getElementById('otherOperationGroup');
+        if (this.value === 'other') {
+            otherGroup.style.display = 'block';
         } else {
-            bluetoothGroup.style.display = 'block';
-            networkGroup.style.display = 'none';
+            otherGroup.style.display = 'none';
         }
+        updatePreview();
     });
+    
+    document.getElementById('otherOperation').addEventListener('input', updatePreview);
     
     // リアルタイムプレビューの設定
     document.getElementById('serialNumber').addEventListener('input', updatePreview);
     document.getElementById('modelNumber').addEventListener('input', updatePreview);
-    document.getElementById('movementType').addEventListener('change', function() {
-        const otherGroup = document.getElementById('otherMovementGroup');
-        if (this.value === 'その他') {
-            otherGroup.style.display = 'block';
-        } else {
-            otherGroup.style.display = 'none';
-            document.getElementById('otherMovement').value = '';
-        }
-        updatePreview();
-    });
-    document.getElementById('otherMovement').addEventListener('input', updatePreview);
     document.getElementById('purchasePrice').addEventListener('input', updatePreview);
     document.getElementById('batteryCost').addEventListener('input', updatePreview);
     document.getElementById('beltCost').addEventListener('input', updatePreview);
@@ -57,8 +45,8 @@ document.addEventListener('DOMContentLoaded', function() {
 function updatePreview() {
     const serialNumber = document.getElementById('serialNumber').value || '1';
     const modelNumber = document.getElementById('modelNumber').value || '-';
-    const movementType = document.getElementById('movementType').value;
-    const otherMovement = document.getElementById('otherMovement').value;
+    const operationType = document.getElementById('operationType').value;
+    const otherOperation = document.getElementById('otherOperation').value;
     const purchasePrice = document.getElementById('purchasePrice').value;
     const batteryCost = document.getElementById('batteryCost').value;
     const beltCost = document.getElementById('beltCost').value;
@@ -67,21 +55,17 @@ function updatePreview() {
     // 連番表示（5桁）
     document.getElementById('previewSerial').textContent = serialNumber.padStart(5, '0');
     
-    // 型番表示（17文字で自動改行）
-    let displayModel = modelNumber;
-    if (modelNumber.length > 17) {
-        displayModel = modelNumber.substring(0, 17) + '\n' + modelNumber.substring(17);
-    }
-    document.getElementById('previewModel').textContent = displayModel;
+    // 型番表示（17文字で改行）
+    document.getElementById('previewModel').textContent = modelNumber;
     
-    // 稼働方式表示（中央揃え）
-    let displayMovement = '-';
-    if (movementType === 'その他' && otherMovement) {
-        displayMovement = otherMovement;
-    } else if (movementType) {
-        displayMovement = movementType;
+    // 稼働方式表示
+    let operationText = '-';
+    if (operationType === 'other' && otherOperation) {
+        operationText = otherOperation;
+    } else if (operationType !== 'other') {
+        operationText = operationType;
     }
-    document.getElementById('previewMovement').textContent = displayMovement;
+    document.getElementById('previewOperation').textContent = operationText;
     
     // 価格表示
     document.getElementById('previewPurchase').textContent = purchasePrice ? `¥${Number(purchasePrice).toLocaleString()}-` : '¥-';
@@ -139,11 +123,20 @@ function generateBarcode(text) {
 function printLabel() {
     const serialNumber = document.getElementById('serialNumber').value;
     const modelNumber = document.getElementById('modelNumber').value;
+    const operationType = document.getElementById('operationType').value;
+    const otherOperation = document.getElementById('otherOperation').value;
     const purchasePrice = document.getElementById('purchasePrice').value;
     const batteryCost = document.getElementById('batteryCost').value;
     const beltCost = document.getElementById('beltCost').value;
     const desiredPrice = document.getElementById('desiredPrice').value;
-    const printerIP = document.getElementById('printerIP') ? document.getElementById('printerIP').value : '';
+    
+    // 稼働方式の取得
+    let operation = '';
+    if (operationType === 'other' && otherOperation) {
+        operation = otherOperation;
+    } else if (operationType !== 'other') {
+        operation = operationType;
+    }
     
     // 入力チェック（型番と希望金額のみ必須）
     if (!modelNumber || !desiredPrice) {
@@ -153,45 +146,20 @@ function printLabel() {
     
     // デバイスに応じた印刷処理
     if (isMobileDevice()) {
-        // iPad/iPhone: PrintAssist経由（SDKチェック不要）
+        // iPad/iPhone: PrintAssist経由
         console.log('モバイルデバイスを検出: PrintAssist印刷を使用');
-        printWithPrintAssist(serialNumber, modelNumber, purchasePrice, batteryCost, beltCost, desiredPrice);
+        printWithPrintAssist(serialNumber, modelNumber, operation, purchasePrice, batteryCost, beltCost, desiredPrice);
     } else {
-        // PC: ePOS-Print SDK
-        const connectionType = document.getElementById('connectionType').value;
-        const printerBT = document.getElementById('printerBT').value;
-        
-        // 接続方法に応じたチェック
-        if (connectionType === 'bluetooth' && !printerBT) {
-            showMessage('Bluetoothアドレスを入力してください', 'error');
-            return;
-        }
-        
-        if (connectionType === 'network' && !printerIP) {
-            showMessage('プリンターIPアドレスを入力してください', 'error');
-            return;
-        }
-        
-        // ePOS-Print SDKの確認（PCのみ）
-        if (typeof epson === 'undefined') {
-            showMessage('ePOS-Print SDKが読み込まれていません。epos-2.27.0.jsが正しく配置されているか確認してください。', 'error');
-            console.error('epsonオブジェクトが見つかりません');
-            return;
-        }
-        
-        // 接続方法に応じて印刷
-        if (connectionType === 'bluetooth') {
-            printViaBluetooth(serialNumber, modelNumber, purchasePrice, batteryCost, beltCost, desiredPrice, printerBT);
-        } else {
-            printViaNetwork(serialNumber, modelNumber, purchasePrice, batteryCost, beltCost, desiredPrice, printerIP);
-        }
+        // PC: ePOS-Print SDK - 現在はモバイル専用のため警告
+        showMessage('このアプリはiPad/iPhone専用です。モバイルデバイスで開いてください。', 'error');
+        return;
     }
 }
 
 // PrintAssist印刷（iPad/iPhone）
-function printWithPrintAssist(serialNumber, modelNumber, purchasePrice, batteryCost, beltCost, desiredPrice) {
+function printWithPrintAssist(serialNumber, modelNumber, operation, purchasePrice, batteryCost, beltCost, desiredPrice) {
     console.log('=== PrintAssist印刷開始 ===');
-    console.log('入力データ:', {serialNumber, modelNumber, purchasePrice, batteryCost, beltCost, desiredPrice});
+    console.log('入力データ:', {serialNumber, modelNumber, operation, purchasePrice, batteryCost, beltCost, desiredPrice});
     
     // PrintAssistアプリの確認を促す
     if (confirm('PrintAssistアプリで印刷します。\n\nPrintAssistがインストールされていますか？\n\n「OK」= インストール済み（印刷実行）\n「キャンセル」= 未インストール（App Storeへ移動）')) {
@@ -212,90 +180,70 @@ function printWithPrintAssist(serialNumber, modelNumber, purchasePrice, batteryC
         console.log('日時:', dateString);
         console.log('QRコード番号:', qrcodeNumber);
         
-        // 稼働方式取得
-        const movementType = document.getElementById('movementType').value;
-        const otherMovement = document.getElementById('otherMovement').value;
-        let displayMovement = '';
-        if (movementType === 'その他' && otherMovement) {
-            displayMovement = otherMovement;
-        } else if (movementType) {
-            displayMovement = movementType;
-        }
-        
-        // 型番を17文字で改行
-        let modelLines = [];
-        for (let i = 0; i < modelNumber.length; i += 17) {
-            modelLines.push(modelNumber.substring(i, i + 17));
-        }
-        
-        // ePOS-Print XML生成（58mm用紙対応）
+        // ePOS-Print XML生成（日本語対応、58mm用紙）
         let xml = '<?xml version="1.0" encoding="utf-8"?>';
         xml += '<epos-print xmlns="http://www.epson-pos.com/schemas/2011/03/epos-print">';
         xml += '<text lang="ja"/>'; // 日本語設定
         xml += '<text align="center"/>';
         
-        // ヘッダー (T's time + 連番)
-        xml += '<text width="2" height="1"/>';
-        xml += `<text>T&apos;s time          ${serialNumber.padStart(5, '0')}&#10;&#10;</text>`;
+        // ヘッダー行: T's time     00001
+        xml += '<text width="2" height="1" em="true"/>';
+        xml += `<text>T&apos;s time     ${serialNumber.padStart(5, '0')}&#10;&#10;</text>`;
         
-        // 型番（17文字改行、左揃え）
-        xml += '<text align="left"/>';
-        xml += '<text width="1" height="1"/>';
+        // 型番（17文字で自動改行）
+        xml += '<text width="1" height="1" em="false"/>';
+        const modelLines = splitText(modelNumber, 17);
         for (let line of modelLines) {
             xml += `<text>${escapeXml(line)}&#10;</text>`;
         }
-        xml += '<text>&#10;</text>';
+        xml += '<text>&#10;</text>'; // 空行
         
         // 稼働方式（中央揃え）
-        if (displayMovement) {
-            xml += '<text align="center"/>';
-            xml += `<text>      ${escapeXml(displayMovement)}&#10;&#10;</text>`;
+        if (operation) {
+            xml += `<text>${escapeXml(operation)}&#10;&#10;</text>`;
         }
         
-        // 購入価格（入力されている場合のみ）
-        xml += '<text align="left"/>';
+        // 購入価格（入力がある場合のみ）
         if (purchasePrice) {
-            const purchasePriceStr = Number(purchasePrice).toLocaleString();
-            if (Number(purchasePrice) >= 90000) {
-                xml += '<text>購入金額&#10;</text>';
-                xml += `<text>  ¥${purchasePriceStr}-&#10;</text>`;
+            const priceNum = Number(purchasePrice);
+            if (priceNum >= 100000) {
+                // 10万以上は2行
+                xml += `<text>購入価格&#10;</text>`;
+                xml += `<text>¥${priceNum.toLocaleString()}-&#10;</text>`;
             } else {
-                xml += `<text>購入金額¥${purchasePriceStr}-&#10;</text>`;
+                xml += `<text>購入価格¥${priceNum.toLocaleString()}-&#10;</text>`;
             }
         }
         
-        // 電池代（入力されている場合のみ）
+        // 電池代（入力がある場合のみ）
         if (batteryCost) {
-            xml += `<text>  電池代¥${Number(batteryCost).toLocaleString()}-&#10;</text>`;
+            xml += `<text>電池代¥${Number(batteryCost).toLocaleString()}-&#10;</text>`;
         }
         
-        // ベルト代（入力されている場合のみ）
+        // ベルト代（入力がある場合のみ）
         if (beltCost) {
             xml += `<text>ベルト代¥${Number(beltCost).toLocaleString()}-&#10;</text>`;
         }
         
-        xml += '<text>&#10;</text>';
+        xml += '<text>&#10;</text>'; // 空行
         
-        // 希望金額（9万円以上で改行）
-        xml += '<text align="center"/>';
-        const desiredPriceNum = Number(desiredPrice);
-        const desiredPriceStr = desiredPriceNum.toLocaleString();
-        if (desiredPriceNum >= 90000) {
-            xml += '<text width="2" height="2"/>';
-            xml += '<text>希望金額&#10;</text>';
-            xml += `<text>¥${desiredPriceStr}-&#10;&#10;</text>`;
+        // 希望金額（9万以上で2行）
+        const desiredNum = Number(desiredPrice);
+        xml += '<text width="2" height="2" em="true"/>';
+        if (desiredNum >= 90000) {
+            xml += `<text>希望金額&#10;</text>`;
+            xml += `<text>¥${desiredNum.toLocaleString()}-&#10;&#10;</text>`;
         } else {
-            xml += '<text width="2" height="2"/>';
-            xml += `<text>希望金額¥${desiredPriceStr}-&#10;&#10;</text>`;
+            xml += `<text>希望金額¥${desiredNum.toLocaleString()}-&#10;&#10;</text>`;
         }
         
         // 日時
-        xml += '<text width="1" height="1"/>';
+        xml += '<text width="1" height="1" em="false"/>';
         xml += `<text>${escapeXml(dateString)}&#10;&#10;</text>`;
         
         // QRコード
         xml += `<symbol type="qrcode_model_2" level="h" width="5" height="0" size="0">${qrcodeNumber}</symbol>`;
-        xml += '<text>&#10;</text>';
+        xml += `<text>&#10;${qrcodeNumber}&#10;</text>`;
         xml += '<feed line="2"/>';
         xml += '<cut type="feed"/>';
         xml += '</epos-print>';
@@ -361,6 +309,16 @@ function escapeXml(str) {
               .replace(/>/g, '&gt;')
               .replace(/"/g, '&quot;')
               .replace(/'/g, '&apos;');
+}
+
+// テキストを指定文字数で分割（17文字で改行）
+function splitText(text, maxLength) {
+    if (!text) return [''];
+    const lines = [];
+    for (let i = 0; i < text.length; i += maxLength) {
+        lines.push(text.substring(i, i + maxLength));
+    }
+    return lines;
 }
 
 // Bluetooth接続で印刷
@@ -500,93 +458,56 @@ function executePrint(eposDevice, serialNumber, modelNumber, purchasePrice, batt
             if (retcode === 'OK') {
                 const printerObj = devobj;
                 
-                // 稼働方式取得
-                const movementType = document.getElementById('movementType').value;
-                const otherMovement = document.getElementById('otherMovement').value;
-                let displayMovement = '';
-                if (movementType === 'その他' && otherMovement) {
-                    displayMovement = otherMovement;
-                } else if (movementType) {
-                    displayMovement = movementType;
-                }
-                
                 // 日時生成
                 const now = new Date();
                 const dateString = `${now.getFullYear()}年${(now.getMonth()+1).toString().padStart(2,'0')}月${now.getDate().toString().padStart(2,'0')}日 ${now.getHours().toString().padStart(2,'0')}:${now.getMinutes().toString().padStart(2,'0')} ${now.getSeconds().toString().padStart(2,'0')}秒`;
-                const qrcodeNumber = `${now.getFullYear()}${(now.getMonth()+1).toString().padStart(2,'0')}${now.getDate().toString().padStart(2,'0')}${serialNumber.padStart(5, '0')}`;
+                const barcodeNumber = `${now.getFullYear()}${(now.getMonth()+1).toString().padStart(2,'0')}${now.getDate().toString().padStart(2,'0')}${serialNumber.padStart(5, '0')}`;
                 
-                // 型番を17文字で改行
-                let modelLines = [];
-                for (let i = 0; i < modelNumber.length; i += 17) {
-                    modelLines.push(modelNumber.substring(i, i + 17));
-                }
-                
-                // 日本語設定
+                // 日本語設定を追加
                 printerObj.addTextLang(printerObj.LANG_JA);
                 
-                // ヘッダー (T's time + 連番)
+                // 印刷データ作成
                 printerObj.addTextAlign(printerObj.ALIGN_CENTER);
+                
+                // ヘッダー行
+                printerObj.addTextStyle(false, false, true, printerObj.COLOR_1);
                 printerObj.addTextSize(2, 1);
-                printerObj.addText(`T's time          ${serialNumber.padStart(5, '0')}\n\n`);
+                printerObj.addText(`T's time     ${serialNumber.padStart(5, '0')}\n`);
+                printerObj.addText('--------------------------------\n');
                 
-                // 型番（17文字改行、左揃え）
-                printerObj.addTextAlign(printerObj.ALIGN_LEFT);
+                // 型番
                 printerObj.addTextSize(1, 1);
-                for (let line of modelLines) {
-                    printerObj.addText(`${line}\n`);
-                }
-                printerObj.addText('\n');
+                printerObj.addTextStyle(false, false, false, printerObj.COLOR_1);
+                printerObj.addText(`${modelNumber}\n\n`);
                 
-                // 稼働方式（中央揃え）
-                if (displayMovement) {
-                    printerObj.addTextAlign(printerObj.ALIGN_CENTER);
-                    printerObj.addText(`      ${displayMovement}\n\n`);
-                }
+                // 購入価格
+                printerObj.addText(`購入価格　¥${Number(purchasePrice).toLocaleString()}-\n`);
                 
-                // 購入価格（入力されている場合のみ、左揃え）
-                printerObj.addTextAlign(printerObj.ALIGN_LEFT);
-                if (purchasePrice) {
-                    const purchasePriceNum = Number(purchasePrice);
-                    const purchasePriceStr = purchasePriceNum.toLocaleString();
-                    if (purchasePriceNum >= 90000) {
-                        printerObj.addText('購入金額\n');
-                        printerObj.addText(`  ¥${purchasePriceStr}-\n`);
-                    } else {
-                        printerObj.addText(`購入金額¥${purchasePriceStr}-\n`);
-                    }
-                }
-                
-                // 電池代（入力されている場合のみ）
+                // 電池代
                 if (batteryCost) {
-                    printerObj.addText(`  電池代¥${Number(batteryCost).toLocaleString()}-\n`);
+                    printerObj.addText(`電池代　¥${Number(batteryCost).toLocaleString()}-\n`);
                 }
                 
-                // ベルト代（入力されている場合のみ）
+                // ベルト代
                 if (beltCost) {
-                    printerObj.addText(`ベルト代¥${Number(beltCost).toLocaleString()}-\n`);
+                    printerObj.addText(`ベルト代　¥${Number(beltCost).toLocaleString()}-\n`);
                 }
                 
                 printerObj.addText('\n');
                 
-                // 希望金額（9万円以上で改行、中央揃え）
-                printerObj.addTextAlign(printerObj.ALIGN_CENTER);
-                const desiredPriceNum = Number(desiredPrice);
-                const desiredPriceStr = desiredPriceNum.toLocaleString();
+                // 希望金額
                 printerObj.addTextSize(2, 2);
-                if (desiredPriceNum >= 90000) {
-                    printerObj.addText('希望金額\n');
-                    printerObj.addText(`¥${desiredPriceStr}-\n\n`);
-                } else {
-                    printerObj.addText(`希望金額¥${desiredPriceStr}-\n\n`);
-                }
+                printerObj.addTextStyle(false, false, true, printerObj.COLOR_1);
+                printerObj.addText(`希望金額　¥${Number(desiredPrice).toLocaleString()}-\n\n`);
                 
                 // 日時
                 printerObj.addTextSize(1, 1);
+                printerObj.addTextStyle(false, false, false, printerObj.COLOR_1);
                 printerObj.addText(`${dateString}\n\n`);
                 
-                // QRコード
-                printerObj.addSymbol(qrcodeNumber, printerObj.SYMBOL_QRCODE_MODEL_2, printerObj.LEVEL_H, 5, 0, 0);
-                printerObj.addText('\n');
+                // QRコード（バーコードの代わり）
+                printerObj.addSymbol(barcodeNumber, printerObj.SYMBOL_QRCODE_MODEL_2, printerObj.LEVEL_H, 5, 0, 0);
+                printerObj.addText(`\n${barcodeNumber}\n`);
                 
                 printerObj.addFeedLine(2);
                 printerObj.addCut(printerObj.CUT_FEED);
@@ -612,6 +533,9 @@ function executePrint(eposDevice, serialNumber, modelNumber, purchasePrice, batt
 // フォームクリア関数
 function clearForm() {
     document.getElementById('modelNumber').value = '';
+    document.getElementById('operationType').selectedIndex = 0;
+    document.getElementById('otherOperation').value = '';
+    document.getElementById('otherOperationGroup').style.display = 'none';
     document.getElementById('purchasePrice').value = '';
     document.getElementById('batteryCost').value = '';
     document.getElementById('beltCost').value = '';
