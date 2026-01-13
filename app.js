@@ -102,13 +102,13 @@ document.addEventListener('DOMContentLoaded', function() {
     
     document.getElementById('otherOperation').addEventListener('input', updatePreview);
     
-    // カテゴリの切り替え
-    document.getElementById('watchCategory').addEventListener('change', function() {
-        const otherCategoryGroup = document.getElementById('otherCategoryGroup');
-        if (this.value === 'other_category') {
-            otherCategoryGroup.style.display = 'block';
+    // カテゴリーの切り替え
+    document.getElementById('categoryType').addEventListener('change', function() {
+        const otherCatGroup = document.getElementById('otherCategoryGroup');
+        if (this.value === 'other') {
+            otherCatGroup.style.display = 'block';
         } else {
-            otherCategoryGroup.style.display = 'none';
+            otherCatGroup.style.display = 'none';
         }
         updatePreview();
     });
@@ -134,9 +134,9 @@ document.addEventListener('DOMContentLoaded', function() {
 // プレビュー更新関数
 function updatePreview() {
     const serialNumber = document.getElementById('serialNumber').value || '1';
-    const watchCategory = document.getElementById('watchCategory').value;
-    const otherCategory = document.getElementById('otherCategory').value;
     const modelNumber = document.getElementById('modelNumber').value || '-';
+    const categoryType = document.getElementById('categoryType').value;
+    const otherCategory = document.getElementById('otherCategory').value;
     const operationType = document.getElementById('operationType').value;
     const otherOperation = document.getElementById('otherOperation').value;
     const purchasePrice = document.getElementById('purchasePrice').value;
@@ -147,12 +147,12 @@ function updatePreview() {
     // 連番表示（5桁）
     document.getElementById('previewSerial').textContent = serialNumber.padStart(5, '0');
     
-    // カテゴリ表示
+    // カテゴリー表示
     let categoryText = '-';
-    if (watchCategory === 'other_category' && otherCategory) {
+    if (categoryType === 'other' && otherCategory) {
         categoryText = otherCategory;
-    } else if (watchCategory !== 'other_category') {
-        categoryText = watchCategory;
+    } else if (categoryType !== 'other') {
+        categoryText = categoryType;
     }
     document.getElementById('previewCategory').textContent = categoryText;
     
@@ -223,9 +223,9 @@ function generateBarcode(text) {
 // 印刷関数
 function printLabel() {
     const serialNumber = document.getElementById('serialNumber').value;
-    const watchCategory = document.getElementById('watchCategory').value;
-    const otherCategory = document.getElementById('otherCategory').value;
     const modelNumber = document.getElementById('modelNumber').value;
+    const categoryType = document.getElementById('categoryType').value;
+    const otherCategory = document.getElementById('otherCategory').value;
     const operationType = document.getElementById('operationType').value;
     const otherOperation = document.getElementById('otherOperation').value;
     const purchasePrice = document.getElementById('purchasePrice').value;
@@ -233,12 +233,12 @@ function printLabel() {
     const beltCost = document.getElementById('beltCost').value;
     const desiredPrice = document.getElementById('desiredPrice').value;
     
-    // カテゴリの取得
+    // カテゴリーの取得
     let category = '';
-    if (watchCategory === 'other_category' && otherCategory) {
+    if (categoryType === 'other' && otherCategory) {
         category = otherCategory;
-    } else if (watchCategory !== 'other_category') {
-        category = watchCategory;
+    } else if (categoryType !== 'other') {
+        category = categoryType;
     }
     
     // 稼働方式の取得
@@ -259,7 +259,7 @@ function printLabel() {
     if (isMobileDevice()) {
         // iPad/iPhone: PrintAssist経由
         console.log('モバイルデバイスを検出: PrintAssist印刷を使用');
-        printWithPrintAssist(serialNumber, category, modelNumber, operation, purchasePrice, batteryCost, beltCost, desiredPrice);
+        printWithPrintAssist(serialNumber, modelNumber, category, operation, purchasePrice, batteryCost, beltCost, desiredPrice);
     } else {
         // PC: ePOS-Print SDK - 現在はモバイル専用のため警告
         showMessage('このアプリはiPad/iPhone専用です。モバイルデバイスで開いてください。', 'error');
@@ -268,9 +268,9 @@ function printLabel() {
 }
 
 // PrintAssist印刷（iPad/iPhone）
-function printWithPrintAssist(serialNumber, category, modelNumber, operation, purchasePrice, batteryCost, beltCost, desiredPrice) {
+function printWithPrintAssist(serialNumber, modelNumber, category, operation, purchasePrice, batteryCost, beltCost, desiredPrice) {
     console.log('=== PrintAssist印刷開始 ===');
-    console.log('入力データ:', {serialNumber, category, modelNumber, operation, purchasePrice, batteryCost, beltCost, desiredPrice});
+    console.log('入力データ:', {serialNumber, modelNumber, category, operation, purchasePrice, batteryCost, beltCost, desiredPrice});
     
     // PrintAssistアプリの確認を促す
     if (confirm('PrintAssistアプリで印刷します。\n\nPrintAssistがインストールされていますか？\n\n「OK」= インストール済み（印刷実行）\n「キャンセル」= 未インストール（App Storeへ移動）')) {
@@ -302,7 +302,7 @@ function printWithPrintAssist(serialNumber, category, modelNumber, operation, pu
         const serialFullWidth = toFullWidth(serialNumber.padStart(5, '0'));
         xml += `<text>T&apos;s time   ${serialFullWidth}&#10;&#10;</text>`;
         
-        // カテゴリ（中央揃え）
+        // カテゴリー表示（中央揃え）
         xml += '<text width="1" height="1" em="false"/>';
         if (category) {
             xml += `<text>${escapeXml(category)}&#10;&#10;</text>`;
@@ -659,10 +659,10 @@ function executePrint(eposDevice, serialNumber, modelNumber, purchasePrice, batt
 
 // フォームクリア関数
 function clearForm() {
-    document.getElementById('watchCategory').selectedIndex = 0;
+    document.getElementById('modelNumber').value = '';
+    document.getElementById('categoryType').selectedIndex = 0;
     document.getElementById('otherCategory').value = '';
     document.getElementById('otherCategoryGroup').style.display = 'none';
-    document.getElementById('modelNumber').value = '';
     document.getElementById('operationType').selectedIndex = 0;
     document.getElementById('otherOperation').value = '';
     document.getElementById('otherOperationGroup').style.display = 'none';

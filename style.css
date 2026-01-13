@@ -589,12 +589,35 @@ main {
     }
 }
 
-/* カテゴリ表示のスタイル */
+/* プレビューカード用の追加スタイル */
 .preview-category {
+    font-size: 1.1em;
+    color: #e74c3c;
+    font-weight: 600;
+    margin: 10px 0;
+    padding: 8px;
+    background: #fff5f5;
+    border-radius: 5px;
+    text-align: center;
+}
+
+.preview-model {
+    font-size: 1.2em;
+    font-weight: bold;
+    color: #333;
+    margin: 15px 0;
+    padding: 10px;
+    background: #f0f8ff;
+    border-radius: 5px;
+    word-wrap: break-word;
+    line-height: 1.4;
+}
+
+.preview-operation {
     font-size: 1.1em;
     color: #2196F3;
     font-weight: 600;
-    margin: 15px 0;
+    margin: 10px 0 20px 0;
     padding: 8px;
     background: #e3f2fd;
     border-radius: 5px;
