@@ -262,16 +262,25 @@ main {
     font-weight: 600;
 }
 
-.form-group input {
+.form-group input,
+.form-group textarea {
     width: 100%;
     padding: 12px;
     border: 2px solid #ddd;
     border-radius: 8px;
     font-size: 1em;
     transition: border-color 0.3s;
+    font-family: inherit;
 }
 
-.form-group input:focus {
+.form-group textarea {
+    resize: vertical;
+    min-height: 80px;
+    line-height: 1.5;
+}
+
+.form-group input:focus,
+.form-group textarea:focus {
     outline: none;
     border-color: #2196F3;
 }

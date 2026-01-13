@@ -135,7 +135,10 @@ document.addEventListener('DOMContentLoaded', function() {
     
     // リアルタイムプレビューの設定
     document.getElementById('serialNumber').addEventListener('input', updatePreview);
-    document.getElementById('modelNumber').addEventListener('input', updatePreview);
+    document.getElementById('modelNumber').addEventListener('input', function() {
+        autoLineBreak(this);
+        updatePreview();
+    });
     document.getElementById('purchasePrice').addEventListener('input', updatePreview);
     document.getElementById('batteryCost').addEventListener('input', updatePreview);
     document.getElementById('beltCost').addEventListener('input', updatePreview);
@@ -318,15 +321,18 @@ function printWithPrintAssist(serialNumber, modelNumber, category, operation, pu
         xml += '<epos-print xmlns="http://www.epson-pos.com/schemas/2011/03/epos-print">';
         xml += '<text lang="ja"/>'; // 日本語設定
         
-        // ヘッダー行: T's time（左寄せ）　連番（右寄せ）
-        xml += '<text width="2" height="1" em="true"/>';
+        // ヘッダー行: T's time（左）　連番（右）- width="1"で1行に配置
+        xml += '<text width="1" height="1" em="false"/>';
         xml += '<text align="left"/>';
-        xml += `<text>T&apos;s time</text>`;
-        xml += '<text align="right"/>';
         const serialFullWidth = toFullWidth(serialNumber.padStart(5, '0'));
-        xml += `<text>${serialFullWidth}&#10;&#10;</text>`;
+        // 58mm用紙、width="1"の場合、約32文字が1行
+        // "T's time" = 8文字、全角5桁 = 10文字相当、間にスペースを配置
+        const spacesNeeded = 32 - 8 - 10; // 約14スペース
+        const spaces = ' '.repeat(spacesNeeded);
+        xml += `<text>T&apos;s time${spaces}${serialFullWidth}&#10;&#10;</text>`;
         
-        // 中央揃えに戻す
+        // 以降は中央揃えで大きめサイズに
+        xml += '<text width="2" height="1" em="true"/>';
         xml += '<text align="center"/>';
         
         // カテゴリー表示（中央揃え）
@@ -385,8 +391,8 @@ function printWithPrintAssist(serialNumber, modelNumber, category, operation, pu
         xml += '<text width="1" height="1" em="false"/>';
         xml += `<text>${escapeXml(dateString)}&#10;&#10;</text>`;
         
-        // QRコード（データURL）
-        xml += `<symbol type="qrcode_model_2" level="h" width="5" height="0" size="0">${escapeXml(dataURL)}</symbol>`;
+        // QRコード（データURL）- サイズを3に縮小
+        xml += `<symbol type="qrcode_model_2" level="h" width="3" height="0" size="0">${escapeXml(dataURL)}</symbol>`;
         xml += `<text>&#10;${qrcodeNumber}&#10;</text>`;
         xml += '<feed line="2"/>';
         xml += '<cut type="feed"/>';
@@ -476,6 +482,31 @@ function toFullWidth(str) {
     return str.replace(/[0-9]/g, function(s) {
         return String.fromCharCode(s.charCodeAt(0) + 0xFEE0);
     });
+}
+
+// 17文字で自動改行
+function autoLineBreak(textarea) {
+    const maxLength = 17;
+    let value = textarea.value.replace(/\n/g, ''); // 既存の改行を削除
+    let newValue = '';
+    
+    for (let i = 0; i < value.length; i += maxLength) {
+        if (i > 0) {
+            newValue += '\n';
+        }
+        newValue += value.substring(i, i + maxLength);
+    }
+    
+    // カーソル位置を保存
+    const cursorPos = textarea.selectionStart;
+    const oldLength = textarea.value.length;
+    
+    textarea.value = newValue;
+    
+    // カーソル位置を調整（改行が増えた分を考慮）
+    const newLength = newValue.length;
+    const diff = newLength - oldLength;
+    textarea.setSelectionRange(cursorPos + diff, cursorPos + diff);
 }
 
 // Bluetooth接続で印刷
