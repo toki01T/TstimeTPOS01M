@@ -22,7 +22,7 @@ function loadSerialNumber() {
 }
 
 function updateSerialDisplay() {
-    const currentSerial = document.getElementById('serialNumber').value;
+    const currentSerial = loadSerialNumber();
     const display = document.getElementById('currentSerial');
     if (display) {
         display.textContent = currentSerial;
@@ -34,9 +34,8 @@ document.addEventListener('DOMContentLoaded', function() {
     // URLパラメータから値札データを読み込む
     loadFromURL();
     
-    // 保存された連番を読み込む
+    // 保存された連番を読み込む（内部管理）
     const savedSerial = loadSerialNumber();
-    document.getElementById('serialNumber').value = savedSerial;
     console.log('保存された連番を読み込みました:', savedSerial);
     
     // ハンバーガーメニューの設定
@@ -65,7 +64,6 @@ document.addEventListener('DOMContentLoaded', function() {
     document.getElementById('setSerialNumber').addEventListener('click', function() {
         const newSerial = document.getElementById('menuSerialNumber').value;
         if (newSerial && parseInt(newSerial) > 0) {
-            document.getElementById('serialNumber').value = newSerial;
             saveSerialNumber(newSerial);
             updateSerialDisplay();
             updatePreview();
@@ -79,18 +77,11 @@ document.addEventListener('DOMContentLoaded', function() {
     // 連番リセットボタン
     document.getElementById('resetSerialNumber').addEventListener('click', function() {
         if (confirm('連番を1にリセットしますか？')) {
-            document.getElementById('serialNumber').value = 1;
             saveSerialNumber(1);
             updateSerialDisplay();
             updatePreview();
             showMessage('連番を1にリセットしました', 'success');
         }
-    });
-    
-    // 連番が変更されたら自動保存
-    document.getElementById('serialNumber').addEventListener('change', function() {
-        saveSerialNumber(this.value);
-        updateSerialDisplay();
     });
     
     // 履歴表示ボタン
