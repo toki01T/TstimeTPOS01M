@@ -25,12 +25,148 @@ header {
     margin-bottom: 40px;
     padding-bottom: 20px;
     border-bottom: 3px solid #2196F3;
+    position: relative;
 }
 
 header h1 {
     font-size: 2.5em;
     color: #2196F3;
     margin-bottom: 10px;
+}
+
+/* ハンバーガーメニューボタン */
+.hamburger-menu {
+    position: absolute;
+    top: 20px;
+    right: 20px;
+    width: 40px;
+    height: 40px;
+    background: none;
+    border: none;
+    cursor: pointer;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-around;
+    padding: 8px;
+    z-index: 100;
+}
+
+.hamburger-menu span {
+    display: block;
+    width: 100%;
+    height: 3px;
+    background: #2196F3;
+    border-radius: 2px;
+    transition: all 0.3s;
+}
+
+.hamburger-menu:hover span {
+    background: #1976D2;
+}
+
+/* メニューオーバーレイ */
+.menu-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0, 0, 0, 0.5);
+    z-index: 1000;
+    display: none;
+    justify-content: flex-end;
+    align-items: flex-start;
+}
+
+.menu-overlay.active {
+    display: flex;
+}
+
+.menu-content {
+    background: white;
+    width: 300px;
+    height: 100%;
+    padding: 30px;
+    box-shadow: -5px 0 15px rgba(0, 0, 0, 0.3);
+    overflow-y: auto;
+    position: relative;
+}
+
+.menu-close {
+    position: absolute;
+    top: 15px;
+    right: 15px;
+    font-size: 2em;
+    background: none;
+    border: none;
+    cursor: pointer;
+    color: #666;
+    width: 40px;
+    height: 40px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.menu-close:hover {
+    color: #e74c3c;
+}
+
+.menu-content h2 {
+    color: #2196F3;
+    margin-bottom: 30px;
+    font-size: 1.8em;
+}
+
+.menu-item {
+    margin-bottom: 25px;
+    padding-bottom: 20px;
+    border-bottom: 1px solid #e0e0e0;
+}
+
+.menu-item label {
+    display: block;
+    font-weight: 600;
+    color: #333;
+    margin-bottom: 10px;
+}
+
+.menu-item input {
+    width: 100%;
+    padding: 10px;
+    border: 2px solid #e0e0e0;
+    border-radius: 5px;
+    font-size: 1em;
+    margin-bottom: 10px;
+}
+
+.menu-item input:focus {
+    outline: none;
+    border-color: #2196F3;
+}
+
+.btn-menu {
+    width: 100%;
+    padding: 12px;
+    background: linear-gradient(135deg, #2196F3 0%, #1976D2 100%);
+    color: white;
+    border: none;
+    border-radius: 5px;
+    font-size: 1em;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.3s;
+}
+
+.btn-menu:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 5px 15px rgba(33, 150, 243, 0.4);
+}
+
+#currentSerial {
+    font-size: 1.5em;
+    color: #2196F3;
+    font-weight: bold;
 }
 
 .device-info {
