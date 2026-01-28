@@ -191,6 +191,29 @@ header h1 {
     font-size: 1.3em;
 }
 
+.printer-select {
+    width: 100%;
+    padding: 10px;
+    border: 2px solid #ddd;
+    border-radius: 5px;
+    font-size: 1em;
+    background: white;
+    cursor: pointer;
+    transition: border-color 0.3s;
+}
+
+.printer-select:focus {
+    outline: none;
+    border-color: #2196F3;
+}
+
+.input-hint {
+    display: block;
+    margin-top: 5px;
+    color: #666;
+    font-size: 0.85em;
+}
+
 /* オーバーレイ */
 .overlay {
     position: fixed;
