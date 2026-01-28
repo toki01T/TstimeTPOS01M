@@ -4,8 +4,13 @@ let printer = null;
 // デバイス判定関数
 function isMobileDevice() {
     const ua = navigator.userAgent.toLowerCase();
-    const isMobile = /iphone|ipad|ipod|android/.test(ua);
+    // iPad, iPhone, iPod, Androidを検出
+    const isMobile = /iphone|ipad|ipod|android/.test(ua) || 
+                     // iPad Pro等の新しいiPadはMacintoshと表示されることがある
+                     (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
     console.log('User Agent:', ua);
+    console.log('Platform:', navigator.platform);
+    console.log('MaxTouchPoints:', navigator.maxTouchPoints);
     console.log('モバイルデバイス判定:', isMobile);
     return isMobile;
 }
@@ -100,9 +105,11 @@ document.addEventListener('DOMContentLoaded', function() {
         overlay.classList.remove('active');
     });
     
+    // オーバーレイクリック - サイドメニューと履歴モーダルの両方を閉じる
     overlay.addEventListener('click', function() {
         sideMenu.classList.remove('active');
         overlay.classList.remove('active');
+        closeHistoryModal();
     });
     
     // 連番設定ボタン
@@ -136,11 +143,6 @@ document.addEventListener('DOMContentLoaded', function() {
     
     // 履歴モーダルを閉じる
     document.getElementById('closeHistory').addEventListener('click', function() {
-        closeHistoryModal();
-    });
-    
-    // オーバーレイクリックで履歴モーダルも閉じる
-    document.getElementById('overlay').addEventListener('click', function() {
         closeHistoryModal();
     });
     // 稼働方式の切り替え
@@ -250,9 +252,13 @@ function printLabel() {
     // 選択されたプリンターに応じた印刷処理
     const selectedPrinter = loadPrinterSelection();
     
-    if (!isMobileDevice()) {
-        showMessage('このアプリはiPad/iPhone専用です。モバイルデバイスで開いてください。', 'error');
-        return;
+    // デバイス判定を実行（デバッグ用）
+    const isMobile = isMobileDevice();
+    console.log('印刷実行時のデバイス判定:', isMobile);
+    
+    // モバイルデバイスでない場合は警告を表示（ただし印刷は続行）
+    if (!isMobile) {
+        console.warn('モバイルデバイスではありませんが、印刷を試行します');
     }
     
     if (selectedPrinter === 'printassist') {
