@@ -924,8 +924,11 @@ function showHistoryModal() {
 // 履歴リストのイベント委譲設定（パフォーマンス最適化）
 function setupHistoryEventDelegation(historyList, history) {
     let startX = 0;
+    let startY = 0;
     let currentX = 0;
+    let currentY = 0;
     let isDragging = false;
+    let isHorizontalSwipe = null; // スワイプ方向を判定
     let activeItem = null;
     let activeContainer = null;
     
@@ -936,21 +939,39 @@ function setupHistoryEventDelegation(historyList, history) {
         activeItem = historyItem;
         activeContainer = historyItem.closest('.history-item-container');
         startX = e.touches[0].clientX;
+        startY = e.touches[0].clientY;
+        currentX = startX;
+        currentY = startY;
         isDragging = true;
+        isHorizontalSwipe = null; // リセット
         historyItem.classList.add('swiping');
     }, {passive: true});
     
     historyList.addEventListener('touchmove', function(e) {
         if (!isDragging || !activeContainer) return;
-        currentX = e.touches[0].clientX;
-        const deltaX = currentX - startX;
         
-        // 左にスワイプした場合のみ
-        if (deltaX < 0) {
-            const moveX = Math.max(deltaX, -80);
-            activeContainer.style.transform = `translateX(${moveX}px)`;
+        currentX = e.touches[0].clientX;
+        currentY = e.touches[0].clientY;
+        const deltaX = currentX - startX;
+        const deltaY = currentY - startY;
+        
+        // 初回のみスワイプ方向を判定
+        if (isHorizontalSwipe === null) {
+            // 横方向の動きが縦方向より大きければ横スワイプと判定
+            isHorizontalSwipe = Math.abs(deltaX) > Math.abs(deltaY);
         }
-    }, {passive: true});
+        
+        // 横スワイプの場合のみスワイプ処理を実行
+        if (isHorizontalSwipe) {
+            // 左にスワイプした場合のみ
+            if (deltaX < 0) {
+                e.preventDefault(); // 横スワイプ時のみスクロールを防止
+                const moveX = Math.max(deltaX, -80);
+                activeContainer.style.transform = `translateX(${moveX}px)`;
+            }
+        }
+        // 縦スワイプの場合は何もせず、通常のスクロールを許可
+    });
     
     historyList.addEventListener('touchend', function(e) {
         if (!isDragging || !activeItem || !activeContainer) return;
@@ -959,15 +980,16 @@ function setupHistoryEventDelegation(historyList, history) {
         
         const deltaX = currentX - startX;
         
-        // 40px以上左にスワイプしたら削除ボタンを表示
-        if (deltaX < -40) {
+        // 横スワイプだった場合のみスワイプアクションを実行
+        if (isHorizontalSwipe && deltaX < -40) {
             activeContainer.style.transform = 'translateX(-80px)';
-        } else {
+        } else if (isHorizontalSwipe) {
             activeContainer.style.transform = 'translateX(0)';
         }
         
         activeItem = null;
         activeContainer = null;
+        isHorizontalSwipe = null;
     }, {passive: true});
     
     // クリックイベント（委譲）
