@@ -859,112 +859,146 @@ function showHistoryModal() {
     // サイドメニューを閉じる
     document.getElementById('sideMenu').classList.remove('active');
     
-    // 履歴を読み込んで表示
-    const history = getHistory();
-    
-    if (history.length === 0) {
-        historyList.innerHTML = '<p class="no-history">履歴がありません</p>';
-    } else {
-        historyList.innerHTML = '';
-        
-        history.forEach((item, index) => {
-            const wrapper = document.createElement('div');
-            wrapper.className = 'history-item-wrapper';
-            
-            const container = document.createElement('div');
-            container.className = 'history-item-container';
-            
-            const historyItem = document.createElement('div');
-            historyItem.className = 'history-item';
-            
-            const date = new Date(item.date);
-            const dateStr = `${date.getFullYear()}/${(date.getMonth()+1).toString().padStart(2,'0')}/${date.getDate().toString().padStart(2,'0')} ${date.getHours().toString().padStart(2,'0')}:${date.getMinutes().toString().padStart(2,'0')}`;
-            
-            historyItem.innerHTML = `
-                <div class="history-item-header">
-                    <span class="history-date">${dateStr}</span>
-                    <span class="history-serial">No.${item.serialNumber}</span>
-                </div>
-                <div class="history-item-body">
-                    ${item.category ? `<div class="history-category">${item.category}</div>` : ''}
-                    <div class="history-model">${item.modelNumber}</div>
-                    ${item.operation ? `<div class="history-operation">${item.operation}</div>` : ''}
-                    <div class="history-price">¥${Number(item.desiredPrice).toLocaleString()}</div>
-                </div>
-            `;
-            
-            // 削除ボタン
-            const deleteButton = document.createElement('div');
-            deleteButton.className = 'delete-button';
-            deleteButton.textContent = '削除';
-            
-            // スワイプ削除機能
-            let startX = 0;
-            let currentX = 0;
-            let isDragging = false;
-            
-            historyItem.addEventListener('touchstart', function(e) {
-                startX = e.touches[0].clientX;
-                isDragging = true;
-                historyItem.classList.add('swiping');
-            });
-            
-            historyItem.addEventListener('touchmove', function(e) {
-                if (!isDragging) return;
-                currentX = e.touches[0].clientX;
-                const deltaX = currentX - startX;
-                
-                // 左にスワイプした場合のみ
-                if (deltaX < 0) {
-                    const moveX = Math.max(deltaX, -80);
-                    container.style.transform = `translateX(${moveX}px)`;
-                }
-            });
-            
-            historyItem.addEventListener('touchend', function(e) {
-                if (!isDragging) return;
-                isDragging = false;
-                historyItem.classList.remove('swiping');
-                
-                const deltaX = currentX - startX;
-                
-                // 40px以上左にスワイプしたら削除ボタンを表示
-                if (deltaX < -40) {
-                    container.style.transform = 'translateX(-80px)';
-                } else {
-                    container.style.transform = 'translateX(0)';
-                }
-            });
-            
-            // 削除ボタンクリック
-            deleteButton.addEventListener('click', function(e) {
-                e.stopPropagation();
-                if (confirm('この履歴を削除しますか？')) {
-                    deleteHistoryItem(index);
-                    showHistoryModal(); // 再読み込み
-                }
-            });
-            
-            // クリックでフォームに復元
-            historyItem.addEventListener('click', function(e) {
-                // スワイプ中はクリックを無効化
-                if (container.style.transform && container.style.transform !== 'translateX(0px)') {
-                    container.style.transform = 'translateX(0)';
-                    return;
-                }
-                loadFromHistory(item);
-                closeHistoryModal();
-            });
-            
-            container.appendChild(historyItem);
-            wrapper.appendChild(container);
-            wrapper.appendChild(deleteButton);
-            historyList.appendChild(wrapper);
-        });
-    }
-    
+    // モーダルを即座に表示（反応速度向上）
     modal.classList.add('active');
     overlay.classList.add('active');
+    
+    // 履歴を読み込んで表示（非同期的に処理）
+    setTimeout(() => {
+        const history = getHistory();
+        
+        if (history.length === 0) {
+            historyList.innerHTML = '<p class="no-history">履歴がありません</p>';
+        } else {
+            // DocumentFragmentを使用してパフォーマンス向上
+            const fragment = document.createDocumentFragment();
+            
+            history.forEach((item, index) => {
+                const wrapper = document.createElement('div');
+                wrapper.className = 'history-item-wrapper';
+                wrapper.dataset.index = index; // インデックスをdata属性に保存
+                
+                const container = document.createElement('div');
+                container.className = 'history-item-container';
+                
+                const historyItem = document.createElement('div');
+                historyItem.className = 'history-item';
+                
+                const date = new Date(item.date);
+                const dateStr = `${date.getFullYear()}/${(date.getMonth()+1).toString().padStart(2,'0')}/${date.getDate().toString().padStart(2,'0')} ${date.getHours().toString().padStart(2,'0')}:${date.getMinutes().toString().padStart(2,'0')}`;
+                
+                historyItem.innerHTML = `
+                    <div class="history-item-header">
+                        <span class="history-date">${dateStr}</span>
+                        <span class="history-serial">No.${item.serialNumber}</span>
+                    </div>
+                    <div class="history-item-body">
+                        ${item.category ? `<div class="history-category">${item.category}</div>` : ''}
+                        <div class="history-model">${item.modelNumber}</div>
+                        ${item.operation ? `<div class="history-operation">${item.operation}</div>` : ''}
+                        <div class="history-price">¥${Number(item.desiredPrice).toLocaleString()}</div>
+                    </div>
+                `;
+                
+                // 削除ボタン
+                const deleteButton = document.createElement('div');
+                deleteButton.className = 'delete-button';
+                deleteButton.textContent = '削除';
+                
+                container.appendChild(historyItem);
+                wrapper.appendChild(container);
+                wrapper.appendChild(deleteButton);
+                fragment.appendChild(wrapper);
+            });
+            
+            // 一括でDOMに追加（パフォーマンス向上）
+            historyList.innerHTML = '';
+            historyList.appendChild(fragment);
+            
+            // イベント委譲を使用（各要素に個別リスナーを追加しない）
+            setupHistoryEventDelegation(historyList, history);
+        }
+    }, 0);
+}
+
+// 履歴リストのイベント委譲設定（パフォーマンス最適化）
+function setupHistoryEventDelegation(historyList, history) {
+    let startX = 0;
+    let currentX = 0;
+    let isDragging = false;
+    let activeItem = null;
+    let activeContainer = null;
+    
+    historyList.addEventListener('touchstart', function(e) {
+        const historyItem = e.target.closest('.history-item');
+        if (!historyItem) return;
+        
+        activeItem = historyItem;
+        activeContainer = historyItem.closest('.history-item-container');
+        startX = e.touches[0].clientX;
+        isDragging = true;
+        historyItem.classList.add('swiping');
+    }, {passive: true});
+    
+    historyList.addEventListener('touchmove', function(e) {
+        if (!isDragging || !activeContainer) return;
+        currentX = e.touches[0].clientX;
+        const deltaX = currentX - startX;
+        
+        // 左にスワイプした場合のみ
+        if (deltaX < 0) {
+            const moveX = Math.max(deltaX, -80);
+            activeContainer.style.transform = `translateX(${moveX}px)`;
+        }
+    }, {passive: true});
+    
+    historyList.addEventListener('touchend', function(e) {
+        if (!isDragging || !activeItem || !activeContainer) return;
+        isDragging = false;
+        activeItem.classList.remove('swiping');
+        
+        const deltaX = currentX - startX;
+        
+        // 40px以上左にスワイプしたら削除ボタンを表示
+        if (deltaX < -40) {
+            activeContainer.style.transform = 'translateX(-80px)';
+        } else {
+            activeContainer.style.transform = 'translateX(0)';
+        }
+        
+        activeItem = null;
+        activeContainer = null;
+    }, {passive: true});
+    
+    // クリックイベント（委譲）
+    historyList.addEventListener('click', function(e) {
+        // 削除ボタンクリック
+        if (e.target.classList.contains('delete-button')) {
+            const wrapper = e.target.closest('.history-item-wrapper');
+            const index = parseInt(wrapper.dataset.index);
+            if (confirm('この履歴を削除しますか？')) {
+                deleteHistoryItem(index);
+                showHistoryModal(); // 再読み込み
+            }
+            return;
+        }
+        
+        // 履歴アイテムクリック
+        const historyItem = e.target.closest('.history-item');
+        if (historyItem) {
+            const container = historyItem.closest('.history-item-container');
+            // スワイプ中はクリックを無効化
+            if (container.style.transform && container.style.transform !== 'translateX(0px)') {
+                container.style.transform = 'translateX(0)';
+                return;
+            }
+            
+            const wrapper = historyItem.closest('.history-item-wrapper');
+            const index = parseInt(wrapper.dataset.index);
+            loadFromHistory(history[index]);
+            closeHistoryModal();
+        }
+    });
 }
 
 // 履歴モーダルを閉じる
