@@ -191,27 +191,60 @@ header h1 {
     font-size: 1.3em;
 }
 
-.printer-select {
-    width: 100%;
-    padding: 10px;
-    border: 2px solid #ddd;
-    border-radius: 5px;
-    font-size: 1em;
-    background: white;
-    cursor: pointer;
-    transition: border-color 0.3s;
-}
-
-.printer-select:focus {
-    outline: none;
-    border-color: #2196F3;
-}
-
-.input-hint {
+/* プリンター選択 */
+.printer-select-label {
     display: block;
-    margin-top: 5px;
+    font-weight: 600;
+    margin-bottom: 15px;
+    color: #333;
+    font-size: 1.1em;
+}
+
+.printer-toggle {
+    display: flex;
+    gap: 10px;
+    margin-bottom: 10px;
+}
+
+.printer-option {
+    flex: 1;
+    padding: 12px 15px;
+    background: white;
     color: #666;
-    font-size: 0.85em;
+    border: 2px solid #ddd;
+    border-radius: 8px;
+    font-size: 1em;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.3s;
+}
+
+.printer-option:hover {
+    border-color: #2196F3;
+    color: #2196F3;
+}
+
+.printer-option.active {
+    background: linear-gradient(135deg, #2196F3 0%, #1976D2 100%);
+    color: white;
+    border-color: #2196F3;
+    box-shadow: 0 2px 8px rgba(33, 150, 243, 0.3);
+}
+
+.printer-info {
+    font-size: 0.95em;
+    color: #666;
+    text-align: center;
+    margin: 10px 0 0 0;
+    padding: 8px;
+    background: white;
+    border-radius: 5px;
+}
+
+.menu-divider {
+    height: 1px;
+    background: linear-gradient(to right, transparent, #ddd, transparent);
+    margin: 20px 0;
 }
 
 /* オーバーレイ */

@@ -1,24 +1,12 @@
 // グローバル変数
 let printer = null;
 
-// デバイス判定関数（iPadOS 13+対応）
+// デバイス判定関数
 function isMobileDevice() {
     const ua = navigator.userAgent.toLowerCase();
-    
-    // 従来のモバイルデバイス判定
-    const hasMobileUA = /iphone|ipad|ipod|android/.test(ua);
-    
-    // iPadOS 13+ 対応: MacintoshでタッチスクリーンがあればiPad
-    const isTouchDevice = navigator.maxTouchPoints > 0;
-    const isMacintoshWithTouch = /macintosh/.test(ua) && isTouchDevice;
-    
-    const isMobile = hasMobileUA || isMacintoshWithTouch;
-    
+    const isMobile = /iphone|ipad|ipod|android/.test(ua);
     console.log('User Agent:', ua);
-    console.log('タッチポイント:', navigator.maxTouchPoints);
     console.log('モバイルデバイス判定:', isMobile);
-    console.log('iPadOS判定:', isMacintoshWithTouch);
-    
     return isMobile;
 }
 
@@ -41,15 +29,31 @@ function updateSerialDisplay() {
     }
 }
 
-// プリンター設定の保存と読み込み
-function savePrinterModel(model) {
-    localStorage.setItem('printerModel', model);
-    console.log('プリンターモデルを保存しました:', model);
+// プリンター選択の保存と読み込み
+function savePrinterSelection(printer) {
+    localStorage.setItem('selectedPrinter', printer);
+    console.log('プリンター選択を保存しました:', printer);
 }
 
-function loadPrinterModel() {
-    const saved = localStorage.getItem('printerModel');
-    return saved || 'TM-m10'; // デフォルトはTM-m10
+function loadPrinterSelection() {
+    const saved = localStorage.getItem('selectedPrinter');
+    return saved || 'printassist'; // デフォルトはPrint Assist
+}
+
+function updatePrinterDisplay(printer) {
+    const printAssistBtn = document.getElementById('printAssistOption');
+    const tmAssistantBtn = document.getElementById('tmAssistantOption');
+    const printerInfo = document.getElementById('printerInfo');
+    
+    if (printer === 'printassist') {
+        printAssistBtn.classList.add('active');
+        tmAssistantBtn.classList.remove('active');
+        printerInfo.textContent = '現在: Print Assist';
+    } else {
+        tmAssistantBtn.classList.add('active');
+        printAssistBtn.classList.remove('active');
+        printerInfo.textContent = '現在: TM Assistant';
+    }
 }
 
 // ページ読み込み時の初期化
@@ -61,20 +65,23 @@ document.addEventListener('DOMContentLoaded', function() {
     const savedSerial = loadSerialNumber();
     console.log('保存された連番を読み込みました:', savedSerial);
     
-    // 保存されたプリンターモデルを読み込む
-    const savedPrinter = loadPrinterModel();
-    const printerSelect = document.getElementById('printerSelect');
-    if (printerSelect) {
-        printerSelect.value = savedPrinter;
-    }
+    // 保存されたプリンター選択を読み込む
+    const savedPrinter = loadPrinterSelection();
+    updatePrinterDisplay(savedPrinter);
+    console.log('保存されたプリンター選択を読み込みました:', savedPrinter);
     
-    // プリンター選択の変更イベント
-    if (printerSelect) {
-        printerSelect.addEventListener('change', function() {
-            savePrinterModel(this.value);
-            showMessage('プリンターを ' + this.value + ' に設定しました', 'success');
-        });
-    }
+    // プリンター選択ボタン
+    document.getElementById('printAssistOption').addEventListener('click', function() {
+        savePrinterSelection('printassist');
+        updatePrinterDisplay('printassist');
+        showMessage('プリンターをPrint Assistに設定しました', 'success');
+    });
+    
+    document.getElementById('tmAssistantOption').addEventListener('click', function() {
+        savePrinterSelection('tmassistant');
+        updatePrinterDisplay('tmassistant');
+        showMessage('プリンターをTM Assistantに設定しました', 'success');
+    });
     
     // ハンバーガーメニューの設定
     const hamburgerMenu = document.getElementById('hamburgerMenu');
@@ -240,28 +247,41 @@ function printLabel() {
         return;
     }
     
-    // デバイスに応じた印刷処理
-    if (isMobileDevice()) {
-        // iPad/iPhone: PrintAssist経由
-        console.log('モバイルデバイスを検出: PrintAssist印刷を使用');
-        printWithPrintAssist(serialNumber, modelNumber, category, operation, purchasePrice, batteryCost, beltCost, desiredPrice);
-    } else {
-        // PC: ePOS-Print SDK - 現在はモバイル専用のため警告
+    // 選択されたプリンターに応じた印刷処理
+    const selectedPrinter = loadPrinterSelection();
+    
+    if (!isMobileDevice()) {
         showMessage('このアプリはiPad/iPhone専用です。モバイルデバイスで開いてください。', 'error');
         return;
     }
+    
+    if (selectedPrinter === 'printassist') {
+        // Print Assist印刷
+        console.log('Print Assist印刷を使用');
+        printWithPrintAssist(serialNumber, modelNumber, category, operation, purchasePrice, batteryCost, beltCost, desiredPrice);
+    } else {
+        // TM Assistant印刷
+        console.log('TM Assistant印刷を使用');
+        printWithTMAssistant(serialNumber, modelNumber, category, operation, purchasePrice, batteryCost, beltCost, desiredPrice);
+    }
 }
 
-// PrintAssist印刷（iPad/iPhone）- 正式なURLスキーム対応
+// PrintAssist印刷（iPad/iPhone）
 function printWithPrintAssist(serialNumber, modelNumber, category, operation, purchasePrice, batteryCost, beltCost, desiredPrice) {
     console.log('=== PrintAssist印刷開始 ===');
     console.log('入力データ:', {serialNumber, modelNumber, category, operation, purchasePrice, batteryCost, beltCost, desiredPrice});
     
+    // PrintAssistアプリの確認を促す
+    if (confirm('PrintAssistアプリで印刷します。\n\nPrintAssistがインストールされていますか？\n\n「OK」= インストール済み（印刷実行）\n「キャンセル」= 未インストール（App Storeへ移動）')) {
+        console.log('PrintAssist印刷を実行します');
+    } else {
+        // App Storeへ移動
+        window.location.href = 'https://apps.apple.com/jp/app/epson-tm-print-assistant/id1025534382';
+        showMessage('App StoreからPrintAssistをインストールしてください', 'error');
+        return;
+    }
+    
     try {
-        // 選択されたプリンターモデルを取得
-        const printerModel = loadPrinterModel();
-        console.log('選択されたプリンター:', printerModel);
-        
         // 日付生成（時刻なし）
         const now = new Date();
         const dateString = `${now.getFullYear()}年${(now.getMonth()+1).toString().padStart(2,'0')}月${now.getDate().toString().padStart(2,'0')}日`;
@@ -296,7 +316,7 @@ function printWithPrintAssist(serialNumber, modelNumber, category, operation, pu
         
         // 型番（中央揃え・手動改行対応）
         xml += '<text align="center"/>';
-        // 手動改行があればそれを尊重、なければ17文字で自動分割
+        // 手動改行があればそれを尊重、なけれは17文字で自動分割
         const modelLines = modelNumber.includes('\n') 
             ? modelNumber.split('\n') 
             : splitText(modelNumber, 17);
@@ -362,41 +382,38 @@ function printWithPrintAssist(serialNumber, modelNumber, category, operation, pu
         console.log('生成されたXML:');
         console.log(xml);
         
-        // PrintAssist公式URLスキーム方式
-        // XMLを直接encodeURIComponentでエンコード（Base64不要）
+        // PrintAssist公式の方法：XMLを直接encodeURIComponentでエンコード
+        // Base64エンコードは不要！
         const encodedXML = encodeURIComponent(xml);
         console.log('URLエンコード完了');
         console.log('エンコード後の文字数:', encodedXML.length);
+        console.log('エンコードデータ（最初の100文字）:', encodedXML.substring(0, 100));
         
-        // 成功時の戻り先URL
+        // URLスキーム生成（PrintAssist公式フォーマット）
+        // tmprintassistant:// 形式を使用
         const success = encodeURIComponent(window.location.href);
+        const printURL = `tmprintassistant://tmprintassistant.epson.com/print?success=${success}&ver=1&data-type=eposprintxml&reselect=yes&data=${encodedXML}`;
+        console.log('完全なURLスキーム長:', printURL.length);
+        console.log('URLスキーム（最初の200文字）:', printURL.substring(0, 200));
         
-        // PrintAssist URLスキーム生成（パラメータ仕様書に準拠）
-        // tmprintassistant://tmprintassistant.epson.com/print?パラメータ
-        const printURL = `tmprintassistant://tmprintassistant.epson.com/print?` +
-            `success=${success}&` +
-            `ver=1&` +
-            `data-type=eposprintxml&` +
-            `printer=${encodeURIComponent(printerModel)}&` + // プリンターモデルを指定
-            `reselect=yes&` + // プリンター再選択を許可
-            `data=${encodedXML}`;
+        // デバッグ用：ユーザーに表示
+        showMessage(`印刷データを生成しました（XML: ${xml.length}文字）。PrintAssistを起動します...`, 'success');
         
-        console.log('PrintAssist URLスキーム生成完了');
-        console.log('URL長:', printURL.length);
-        console.log('プリンター:', printerModel);
-        
-        // デバッグ用メッセージ
-        showMessage(`印刷データ生成完了（${printerModel}）。PrintAssistを起動します...`, 'success');
-        
-        // URLスキームを開く（少し待ってから実行）
+        // 少し待ってからURLスキームを開く
         setTimeout(function() {
-            console.log('PrintAssistアプリを起動します...');
+            console.log('URLスキームを開きます...');
             
             // iOS/iPadで確実に動作する方法
-            window.location.href = printURL;
-            
+            const link = document.createElement('a');
+            link.href = printURL;
+            link.style.display = 'none';
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
             console.log('URLスキーム起動完了');
-        }, 300);
+            
+            showMessage('PrintAssistアプリに印刷データを送信しました', 'success');
+        }, 500);
         
         console.log('=== PrintAssist起動処理完了 ===');
         
@@ -409,17 +426,182 @@ function printWithPrintAssist(serialNumber, modelNumber, category, operation, pu
         updateSerialDisplay();
         updatePreview();
         
-        // 成功メッセージを少し遅らせて表示
-        setTimeout(function() {
-            showMessage('PrintAssistに印刷データを送信しました。連番: ' + newSerial, 'success');
-        }, 1000);
+        showMessage('印刷データを送信しました。連番を ' + newSerial + ' に更新しました。', 'success');
         
     } catch (error) {
         console.error('=== PrintAssist印刷エラー ===');
         console.error('エラー詳細:', error);
         console.error('エラーメッセージ:', error.message);
         console.error('エラースタック:', error.stack);
-        showMessage('印刷エラー: ' + error.message, 'error');
+        showMessage('印刷エラー: ' + error.message + ' (コンソールで詳細を確認してください)', 'error');
+    }
+}
+
+// TM Assistant印刷（iPad/iPhone）
+function printWithTMAssistant(serialNumber, modelNumber, category, operation, purchasePrice, batteryCost, beltCost, desiredPrice) {
+    console.log('=== TM Assistant印刷開始 ===');
+    console.log('入力データ:', {serialNumber, modelNumber, category, operation, purchasePrice, batteryCost, beltCost, desiredPrice});
+    
+    // TM Assistantアプリの確認を促す
+    if (confirm('TM Assistantアプリで印刷します。\n\nTM Assistantがインストールされていますか？\n\n「OK」= インストール済み（印刷実行）\n「キャンセル」= 未インストール（App Storeへ移動）')) {
+        console.log('TM Assistant印刷を実行します');
+    } else {
+        // App Storeへ移動
+        window.location.href = 'https://apps.apple.com/jp/app/epson-tm-assistant/id1300223345';
+        showMessage('App StoreからTM Assistantをインストールしてください', 'error');
+        return;
+    }
+    
+    try {
+        // 日付生成（時刻なし）
+        const now = new Date();
+        const dateString = `${now.getFullYear()}年${(now.getMonth()+1).toString().padStart(2,'0')}月${now.getDate().toString().padStart(2,'0')}日`;
+        const qrcodeNumber = `${now.getFullYear()}${(now.getMonth()+1).toString().padStart(2,'0')}${now.getDate().toString().padStart(2,'0')}${serialNumber.padStart(5, '0')}`;
+        
+        // QRコード用のデータURL生成
+        const dataURL = generateDataURL(modelNumber, category, operation, purchasePrice, batteryCost, beltCost, desiredPrice);
+        
+        console.log('日時:', dateString);
+        console.log('QRコード番号:', qrcodeNumber);
+        console.log('データURL:', dataURL);
+        
+        // ePOS-Print XML生成（日本語対応、58mm用紙）
+        let xml = '<?xml version="1.0" encoding="utf-8"?>';
+        xml += '<epos-print xmlns="http://www.epson-pos.com/schemas/2011/03/epos-print">';
+        xml += '<text lang="ja"/>'; // 日本語設定
+        
+        // ヘッダー行: T's time（左）　連番（右）- スペースで右寄せ調整
+        xml += '<text width="2" height="1" em="true"/>';
+        xml += '<text align="center"/>';
+        const serialHalfWidth = serialNumber.padStart(5, '0');
+        // 58mm用紙でwidth="2"の場合、1行約16文字
+        // "T's time"（8文字）+ 3スペース + "00001"（5文字）= 16文字
+        const headerLine = `T&apos;s time   ${serialHalfWidth}`;
+        xml += `<text>${headerLine}&#10;&#10;</text>`;
+        
+        // カテゴリー表示（中央揃え）
+        xml += '<text width="1" height="1" em="false"/>';
+        if (category) {
+            xml += `<text>${escapeXml(category)}&#10;&#10;</text>`;
+        }
+        
+        // 型番（中央揃え・手動改行対応）
+        xml += '<text align="center"/>';
+        // 手動改行があればそれを尊重、なけれは17文字で自動分割
+        const modelLines = modelNumber.includes('\n') 
+            ? modelNumber.split('\n') 
+            : splitText(modelNumber, 17);
+        for (let line of modelLines) {
+            xml += `<text>${escapeXml(line)}&#10;</text>`;
+        }
+        xml += '<text>&#10;</text>'; // 空行
+        
+        // 稼働方式（中央揃え）
+        if (operation) {
+            xml += `<text>${escapeXml(operation)}&#10;&#10;</text>`;
+        }
+        
+        // 購入価格（入力がある場合のみ）- 「円」表記、ハイフンなし
+        if (purchasePrice) {
+            const priceNum = Number(purchasePrice);
+            if (priceNum >= 100000) {
+                // 10万以上は2行
+                xml += `<text>購入価格&#10;</text>`;
+                xml += `<text>${priceNum.toLocaleString()}円&#10;</text>`;
+            } else {
+                xml += `<text>購入価格${priceNum.toLocaleString()}円&#10;</text>`;
+            }
+        }
+        
+        // 電池代（入力がある場合のみ）- 「円」表記、ハイフンなし
+        if (batteryCost) {
+            xml += `<text>電池代${Number(batteryCost).toLocaleString()}円&#10;</text>`;
+        }
+        
+        // ベルト代（入力がある場合のみ）- 「円」表記、ハイフンなし
+        if (beltCost) {
+            xml += `<text>ベルト代${Number(beltCost).toLocaleString()}円&#10;</text>`;
+        }
+        
+        xml += '<text>&#10;</text>'; // 空行
+        
+        // 金額（希望金額）- 金額のみ表示
+        const desiredNum = Number(desiredPrice);
+        xml += '<text width="2" height="2" em="true"/>';
+        xml += `<text>${desiredNum.toLocaleString()}円&#10;&#10;</text>`;
+        
+        // 注意文（トグルスイッチがONの場合のみ印刷）
+        const printNotice = document.getElementById('printNotice').checked;
+        if (printNotice) {
+            xml += '<text width="1" height="1" em="false"/>';
+            xml += '<text>﹡大幅に金額が離れている場合は&#10;</text>';
+            xml += '<text>お売りする事が出来ません。&#10;</text>';
+            xml += '<text>ご了承下さい。&#10;&#10;</text>';
+        }
+        
+        // 日時
+        xml += '<text width="1" height="1" em="false"/>';
+        xml += `<text>${escapeXml(dateString)}&#10;&#10;</text>`;
+        
+        // QRコード（データURL）- サイズを小さく
+        xml += `<symbol type="qrcode_model_2" level="h" width="3" height="0" size="0">${escapeXml(dataURL)}</symbol>`;
+        xml += `<text>&#10;${qrcodeNumber}&#10;</text>`;
+        xml += '<feed line="2"/>';
+        xml += '<cut type="feed"/>';
+        xml += '</epos-print>';
+        
+        console.log('生成されたXML:');
+        console.log(xml);
+        
+        // TM Assistant用のBase64エンコード
+        const base64XML = btoa(unescape(encodeURIComponent(xml)));
+        console.log('Base64エンコード完了');
+        console.log('エンコード後の文字数:', base64XML.length);
+        
+        // URLスキーム生成（TM Assistant公式フォーマット）
+        // tmassistant:// 形式を使用
+        const printURL = `tmassistant://print?data=${encodeURIComponent(base64XML)}`;
+        console.log('完全なURLスキーム長:', printURL.length);
+        console.log('URLスキーム（最初の200文字）:', printURL.substring(0, 200));
+        
+        // デバッグ用：ユーザーに表示
+        showMessage(`印刷データを生成しました（XML: ${xml.length}文字）。TM Assistantを起動します...`, 'success');
+        
+        // 少し待ってからURLスキームを開く
+        setTimeout(function() {
+            console.log('URLスキームを開きます...');
+            
+            // iOS/iPadで確実に動作する方法
+            const link = document.createElement('a');
+            link.href = printURL;
+            link.style.display = 'none';
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+            console.log('URLスキーム起動完了');
+            
+            showMessage('TM Assistantアプリに印刷データを送信しました', 'success');
+        }, 500);
+        
+        console.log('=== TM Assistant起動処理完了 ===');
+        
+        // 履歴を保存
+        saveToHistory(serialNumber, modelNumber, category, operation, purchasePrice, batteryCost, beltCost, desiredPrice);
+        
+        // 連番を自動的に1増やして保存
+        const newSerial = parseInt(serialNumber) + 1;
+        saveSerialNumber(newSerial);
+        updateSerialDisplay();
+        updatePreview();
+        
+        showMessage('印刷データを送信しました。連番を ' + newSerial + ' に更新しました。', 'success');
+        
+    } catch (error) {
+        console.error('=== TM Assistant印刷エラー ===');
+        console.error('エラー詳細:', error);
+        console.error('エラーメッセージ:', error.message);
+        console.error('エラースタック:', error.stack);
+        showMessage('印刷エラー: ' + error.message + ' (コンソールで詳細を確認してください)', 'error');
     }
 }
 
