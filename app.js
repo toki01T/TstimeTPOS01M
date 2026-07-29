@@ -693,107 +693,114 @@ function createQRCodeImage(text, size) {
 
 function drawCenteredLine(ctx, text, centerX, y) {
     ctx.textAlign = 'center';
-    ctx.fillText(text, centerX, y);
+    ctx.textBaseline = 'top';
+    ctx.fillText(text, Math.round(centerX), Math.round(y));
+}
+
+function applyMpb20Font(ctx, fontFamily, size, weight) {
+    ctx.font = `${weight} ${size}px ${fontFamily}`;
 }
 
 async function createMPB20LabelPdf(labelData) {
-    const widthPx = 384;
-    const widthMm = 48;
-    const paddingTop = 16;
+    const contentWidthPx = 384;
+    const paperWidthPx = 464;
+    const widthMm = 58;
+    const sideMarginPx = Math.round((paperWidthPx - contentWidthPx) / 2);
+    const centerX = sideMarginPx + contentWidthPx / 2;
+    const paddingTop = 20;
     const fontFamily = '"Hiragino Sans", "Hiragino Kaku Gothic ProN", "Yu Gothic", sans-serif';
-    const centerX = widthPx / 2;
-    const qrSize = 120;
+    const qrSize = 136;
 
-    const lineGap = {
-        header: 36,
-        category: 30,
-        model: 26,
-        blank: 12,
-        price: 28,
-        desired: 56,
-        notice: 22,
-        date: 32,
-        qrcodeNumber: 24
+    const fonts = {
+        header: { size: 34, weight: 'bold', line: 42 },
+        body: { size: 26, weight: 'bold', line: 34 },
+        price: { size: 24, weight: 'bold', line: 32 },
+        desired: { size: 50, weight: 'bold', line: 58 },
+        notice: { size: 22, weight: 'bold', line: 28 },
+        footer: { size: 22, weight: 'bold', line: 28 }
     };
 
-    let yEstimate = paddingTop + lineGap.header;
-    if (labelData.category) yEstimate += lineGap.category;
-    yEstimate += labelData.modelLines.length * lineGap.model + lineGap.blank;
-    yEstimate += labelData.priceLines.length * lineGap.price;
-    if (labelData.priceLines.length) yEstimate += lineGap.blank;
-    yEstimate += lineGap.desired;
-    if (labelData.printNotice) yEstimate += labelData.noticeLines.length * lineGap.notice + lineGap.blank;
-    yEstimate += lineGap.date + qrSize + lineGap.qrcodeNumber + 20;
+    let yEstimate = paddingTop + fonts.header.line;
+    if (labelData.category) yEstimate += fonts.body.line;
+    yEstimate += labelData.modelLines.length * fonts.body.line + 14;
+    yEstimate += labelData.priceLines.length * fonts.price.line;
+    if (labelData.priceLines.length) yEstimate += 14;
+    yEstimate += fonts.desired.line;
+    if (labelData.printNotice) yEstimate += labelData.noticeLines.length * fonts.notice.line + 14;
+    yEstimate += fonts.footer.line + qrSize + fonts.footer.line + 24;
 
     const canvas = document.createElement('canvas');
-    canvas.width = widthPx;
+    canvas.width = paperWidthPx;
     canvas.height = Math.ceil(yEstimate);
     const ctx = canvas.getContext('2d');
+    ctx.imageSmoothingEnabled = false;
     ctx.fillStyle = '#ffffff';
     ctx.fillRect(0, 0, canvas.width, canvas.height);
     ctx.fillStyle = '#000000';
-    ctx.textBaseline = 'top';
 
     let y = paddingTop;
 
-    ctx.font = 'bold 28px ' + fontFamily;
+    applyMpb20Font(ctx, fontFamily, fonts.header.size, fonts.header.weight);
     drawCenteredLine(ctx, labelData.headerLine, centerX, y);
-    y += lineGap.header;
+    y += fonts.header.line;
 
     if (labelData.category) {
-        ctx.font = 'bold 20px ' + fontFamily;
+        applyMpb20Font(ctx, fontFamily, fonts.body.size, fonts.body.weight);
         drawCenteredLine(ctx, labelData.category, centerX, y);
-        y += lineGap.category;
+        y += fonts.body.line;
     }
 
-    ctx.font = 'bold 20px ' + fontFamily;
+    applyMpb20Font(ctx, fontFamily, fonts.body.size, fonts.body.weight);
     labelData.modelLines.forEach(function(line) {
         drawCenteredLine(ctx, line, centerX, y);
-        y += lineGap.model;
+        y += fonts.body.line;
     });
-    y += lineGap.blank;
+    y += 14;
 
-    ctx.font = '18px ' + fontFamily;
+    applyMpb20Font(ctx, fontFamily, fonts.price.size, fonts.price.weight);
     labelData.priceLines.forEach(function(line) {
         drawCenteredLine(ctx, line, centerX, y);
-        y += lineGap.price;
+        y += fonts.price.line;
     });
     if (labelData.priceLines.length) {
-        y += lineGap.blank;
+        y += 14;
     }
 
-    ctx.font = 'bold 40px ' + fontFamily;
+    applyMpb20Font(ctx, fontFamily, fonts.desired.size, fonts.desired.weight);
     drawCenteredLine(ctx, labelData.desiredLine, centerX, y);
-    y += lineGap.desired;
+    y += fonts.desired.line;
 
     if (labelData.printNotice) {
-        ctx.font = '16px ' + fontFamily;
+        applyMpb20Font(ctx, fontFamily, fonts.notice.size, fonts.notice.weight);
         labelData.noticeLines.forEach(function(line) {
             drawCenteredLine(ctx, line, centerX, y);
-            y += lineGap.notice;
+            y += fonts.notice.line;
         });
-        y += lineGap.blank;
+        y += 14;
     }
 
-    ctx.font = 'bold 18px ' + fontFamily;
+    applyMpb20Font(ctx, fontFamily, fonts.footer.size, fonts.footer.weight);
     drawCenteredLine(ctx, labelData.dateString, centerX, y);
-    y += lineGap.date;
+    y += fonts.footer.line;
 
     const qrSource = await createQRCodeImage(labelData.dataURL, qrSize);
-    ctx.drawImage(qrSource, (widthPx - qrSize) / 2, y, qrSize, qrSize);
-    y += qrSize + 8;
+    const qrX = Math.round(centerX - qrSize / 2);
+    ctx.imageSmoothingEnabled = false;
+    ctx.drawImage(qrSource, qrX, Math.round(y), qrSize, qrSize);
+    y += qrSize + 10;
 
-    ctx.font = '16px ' + fontFamily;
+    applyMpb20Font(ctx, fontFamily, fonts.footer.size, fonts.footer.weight);
     drawCenteredLine(ctx, labelData.qrcodeNumber, centerX, y);
-    y += lineGap.qrcodeNumber;
+    y += fonts.footer.line;
 
-    const finalHeight = Math.ceil(y + 16);
+    const finalHeight = Math.ceil(y + 20);
     let outputCanvas = canvas;
     if (canvas.height !== finalHeight) {
         const trimmed = document.createElement('canvas');
-        trimmed.width = widthPx;
+        trimmed.width = paperWidthPx;
         trimmed.height = finalHeight;
         const trimmedCtx = trimmed.getContext('2d');
+        trimmedCtx.imageSmoothingEnabled = false;
         trimmedCtx.fillStyle = '#ffffff';
         trimmedCtx.fillRect(0, 0, trimmed.width, trimmed.height);
         trimmedCtx.drawImage(canvas, 0, 0);
@@ -809,9 +816,9 @@ async function createMPB20LabelPdf(labelData) {
         orientation: 'portrait',
         unit: 'mm',
         format: [widthMm, heightMm],
-        compress: true
+        compress: false
     });
-    pdf.addImage(imgData, 'PNG', 0, 0, widthMm, heightMm);
+    pdf.addImage(imgData, 'PNG', 0, 0, widthMm, heightMm, undefined, 'FAST');
     return pdf.output('datauristring').split(',')[1];
 }
 
