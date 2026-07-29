@@ -635,6 +635,7 @@ body {
     display: flex;
     flex-direction: column;
     height: 100%;
+    min-height: 0;
 }
 
 .history-modal-header {
@@ -661,6 +662,7 @@ body {
     overflow-x: hidden;
     padding: 18px;
     -webkit-overflow-scrolling: touch;
+    min-height: 0;
 }
 
 .no-history {
@@ -683,7 +685,7 @@ body {
 .history-item {
     position: relative;
     z-index: 1;
-    padding: 16px;
+    padding: 20px;
     border: 1px solid var(--border);
     border-radius: 18px;
     background: #fff;
@@ -756,9 +758,10 @@ body {
 }
 
 .history-model {
-    font-size: 1.05rem;
+    font-size: 1.2rem;
     font-weight: 800;
     color: var(--accent);
+    word-break: break-all;
 }
 
 .history-operation {
@@ -768,7 +771,7 @@ body {
 
 .history-price {
     color: var(--success);
-    font-size: 1.15rem;
+    font-size: 1.35rem;
     font-weight: 800;
 }
 
@@ -839,10 +842,9 @@ body {
 
     .button-section {
         flex-direction: column;
-        position: sticky;
-        bottom: max(8px, env(safe-area-inset-bottom));
         z-index: 20;
         padding-top: 4px;
+        padding-bottom: env(safe-area-inset-bottom);
     }
 
     .btn-primary,
@@ -874,7 +876,7 @@ body {
     }
 
     .history-list {
-        padding: 12px;
+        padding: 18px;
     }
 
     .status-message {

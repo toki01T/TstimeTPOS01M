@@ -313,8 +313,8 @@ function printWithPrintAssist(serialNumber, modelNumber, category, operation, pu
     try {
         // 日付生成（時刻なし）
         const now = new Date();
-        const dateString = `${now.getFullYear()}年${(now.getMonth()+1).toString().padStart(2,'0')}月${now.getDate().toString().padStart(2,'0')}日`;
-        const qrcodeNumber = `${now.getFullYear()}${(now.getMonth()+1).toString().padStart(2,'0')}${now.getDate().toString().padStart(2,'0')}${serialNumber.padStart(5, '0')}`;
+        const dateString = formatDateJPFullWidth(now);
+        const qrcodeNumber = buildQrcodeNumberFullWidth(now, serialNumber);
         
         // QRコード用のデータURL生成
         const dataURL = generateDataURL(modelNumber, category, operation, purchasePrice, batteryCost, beltCost, desiredPrice);
@@ -331,10 +331,10 @@ function printWithPrintAssist(serialNumber, modelNumber, category, operation, pu
         // ヘッダー行: T's time（左）　連番（右）- スペースで右寄せ調整
         xml += '<text width="2" height="1" em="true"/>';
         xml += '<text align="center"/>';
-        const serialHalfWidth = serialNumber.padStart(5, '0');
+        const serialDisplay = formatSerialDigits5FullWidth(serialNumber);
         // 58mm用紙でwidth="2"の場合、1行約16文字
         // "T's time"（8文字）+ 3スペース + "00001"（5文字）= 16文字
-        const headerLine = `T&apos;s time   ${serialHalfWidth}`;
+        const headerLine = `T&apos;s time   ${serialDisplay}`;
         xml += `<text>${headerLine}&#10;&#10;</text>`;
         
         // カテゴリー表示（中央揃え）
@@ -346,47 +346,36 @@ function printWithPrintAssist(serialNumber, modelNumber, category, operation, pu
         // 型番（中央揃え・手動改行対応）
         xml += '<text align="center"/>';
         // 手動改行があればそれを尊重、なけれは17文字で自動分割
-        const modelLines = modelNumber.includes('\n') 
-            ? modelNumber.split('\n') 
-            : splitText(modelNumber, 17);
+        const normalizedModelNumber = toFullWidth(modelNumber);
+        const modelLines = normalizedModelNumber.includes('\n')
+            ? normalizedModelNumber.split('\n')
+            : splitText(normalizedModelNumber, 17);
         for (let line of modelLines) {
             xml += `<text>${escapeXml(line)}&#10;</text>`;
         }
         xml += '<text>&#10;</text>'; // 空行
         
-        // 稼働方式（中央揃え）
-        if (operation) {
-            xml += `<text>${escapeXml(operation)}&#10;&#10;</text>`;
-        }
+        // (operation is omitted to match the reference layout)
         
-        // 購入価格（入力がある場合のみ）- 「円」表記、ハイフンなし
+        // Price lines (fixed 5-digit, full-width)
         if (purchasePrice) {
-            const priceNum = Number(purchasePrice);
-            if (priceNum >= 100000) {
-                // 10万以上は2行
-                xml += `<text>購入価格&#10;</text>`;
-                xml += `<text>${priceNum.toLocaleString()}円&#10;</text>`;
-            } else {
-                xml += `<text>購入価格${priceNum.toLocaleString()}円&#10;</text>`;
-            }
+            xml += `<text>${escapeXml(buildPriceLine('購入価格', purchasePrice))}&#10;</text>`;
         }
-        
-        // 電池代（入力がある場合のみ）- 「円」表記、ハイフンなし
+
         if (batteryCost) {
-            xml += `<text>電池代${Number(batteryCost).toLocaleString()}円&#10;</text>`;
+            xml += `<text>${escapeXml(buildPriceLine('電池代', batteryCost))}&#10;</text>`;
         }
-        
-        // ベルト代（入力がある場合のみ）- 「円」表記、ハイフンなし
+
         if (beltCost) {
-            xml += `<text>ベルト代${Number(beltCost).toLocaleString()}円&#10;</text>`;
+            xml += `<text>${escapeXml(buildPriceLine('ベルト代', beltCost))}&#10;</text>`;
         }
         
         xml += '<text>&#10;</text>'; // 空行
         
-        // 金額（希望金額）- 金額のみ表示
-        const desiredNum = Number(desiredPrice);
+        // Amount (desired price) - digits only
+        const desiredLine = formatPriceDigits5FullWidth(desiredPrice) + '円';
         xml += '<text width="2" height="2" em="true"/>';
-        xml += `<text>${desiredNum.toLocaleString()}円&#10;&#10;</text>`;
+        xml += `<text>${escapeXml(desiredLine)}&#10;&#10;</text>`;
         
         // 注意文（トグルスイッチがONの場合のみ印刷）
         const printNotice = document.getElementById('printNotice').checked;
@@ -484,8 +473,8 @@ function printWithTMAssistant(serialNumber, modelNumber, category, operation, pu
     try {
         // 日付生成（時刻なし）
         const now = new Date();
-        const dateString = `${now.getFullYear()}年${(now.getMonth()+1).toString().padStart(2,'0')}月${now.getDate().toString().padStart(2,'0')}日`;
-        const qrcodeNumber = `${now.getFullYear()}${(now.getMonth()+1).toString().padStart(2,'0')}${now.getDate().toString().padStart(2,'0')}${serialNumber.padStart(5, '0')}`;
+        const dateString = formatDateJPFullWidth(now);
+        const qrcodeNumber = buildQrcodeNumberFullWidth(now, serialNumber);
         
         // QRコード用のデータURL生成
         const dataURL = generateDataURL(modelNumber, category, operation, purchasePrice, batteryCost, beltCost, desiredPrice);
@@ -502,10 +491,10 @@ function printWithTMAssistant(serialNumber, modelNumber, category, operation, pu
         // ヘッダー行: T's time（左）　連番（右）- スペースで右寄せ調整
         xml += '<text width="2" height="1" em="true"/>';
         xml += '<text align="center"/>';
-        const serialHalfWidth = serialNumber.padStart(5, '0');
+        const serialDisplay = formatSerialDigits5FullWidth(serialNumber);
         // 58mm用紙でwidth="2"の場合、1行約16文字
         // "T's time"（8文字）+ 3スペース + "00001"（5文字）= 16文字
-        const headerLine = `T&apos;s time   ${serialHalfWidth}`;
+        const headerLine = `T&apos;s time   ${serialDisplay}`;
         xml += `<text>${headerLine}&#10;&#10;</text>`;
         
         // カテゴリー表示（中央揃え）
@@ -517,47 +506,36 @@ function printWithTMAssistant(serialNumber, modelNumber, category, operation, pu
         // 型番（中央揃え・手動改行対応）
         xml += '<text align="center"/>';
         // 手動改行があればそれを尊重、なけれは17文字で自動分割
-        const modelLines = modelNumber.includes('\n') 
-            ? modelNumber.split('\n') 
-            : splitText(modelNumber, 17);
+        const normalizedModelNumber = toFullWidth(modelNumber);
+        const modelLines = normalizedModelNumber.includes('\n')
+            ? normalizedModelNumber.split('\n')
+            : splitText(normalizedModelNumber, 17);
         for (let line of modelLines) {
             xml += `<text>${escapeXml(line)}&#10;</text>`;
         }
         xml += '<text>&#10;</text>'; // 空行
         
-        // 稼働方式（中央揃え）
-        if (operation) {
-            xml += `<text>${escapeXml(operation)}&#10;&#10;</text>`;
-        }
+        // (operation is omitted to match the reference layout)
         
-        // 購入価格（入力がある場合のみ）- 「円」表記、ハイフンなし
+        // Price lines (fixed 5-digit, full-width)
         if (purchasePrice) {
-            const priceNum = Number(purchasePrice);
-            if (priceNum >= 100000) {
-                // 10万以上は2行
-                xml += `<text>購入価格&#10;</text>`;
-                xml += `<text>${priceNum.toLocaleString()}円&#10;</text>`;
-            } else {
-                xml += `<text>購入価格${priceNum.toLocaleString()}円&#10;</text>`;
-            }
+            xml += `<text>${escapeXml(buildPriceLine('購入価格', purchasePrice))}&#10;</text>`;
         }
-        
-        // 電池代（入力がある場合のみ）- 「円」表記、ハイフンなし
+
         if (batteryCost) {
-            xml += `<text>電池代${Number(batteryCost).toLocaleString()}円&#10;</text>`;
+            xml += `<text>${escapeXml(buildPriceLine('電池代', batteryCost))}&#10;</text>`;
         }
-        
-        // ベルト代（入力がある場合のみ）- 「円」表記、ハイフンなし
+
         if (beltCost) {
-            xml += `<text>ベルト代${Number(beltCost).toLocaleString()}円&#10;</text>`;
+            xml += `<text>${escapeXml(buildPriceLine('ベルト代', beltCost))}&#10;</text>`;
         }
         
         xml += '<text>&#10;</text>'; // 空行
         
-        // 金額（希望金額）- 金額のみ表示
-        const desiredNum = Number(desiredPrice);
+        // Amount (desired price) - digits only
+        const desiredLine = formatPriceDigits5FullWidth(desiredPrice) + '円';
         xml += '<text width="2" height="2" em="true"/>';
-        xml += `<text>${desiredNum.toLocaleString()}円&#10;&#10;</text>`;
+        xml += `<text>${escapeXml(desiredLine)}&#10;&#10;</text>`;
         
         // 注意文（トグルスイッチがONの場合のみ印刷）
         const printNotice = document.getElementById('printNotice').checked;
@@ -655,8 +633,8 @@ async function printWithMPB20(serialNumber, modelNumber, category, operation, pu
         showMessage('MP-B20用の印刷データを作成中...', 'success');
 
         const now = new Date();
-        const dateString = `${now.getFullYear()}年${(now.getMonth()+1).toString().padStart(2,'0')}月${now.getDate().toString().padStart(2,'0')}日`;
-        const qrcodeNumber = `${now.getFullYear()}${(now.getMonth()+1).toString().padStart(2,'0')}${now.getDate().toString().padStart(2,'0')}${serialNumber.padStart(5, '0')}`;
+        const dateString = formatDateJPFullWidth(now);
+        const qrcodeNumber = buildQrcodeNumberFullWidth(now, serialNumber);
         const dataURL = generateDataURL(modelNumber, category, operation, purchasePrice, batteryCost, beltCost, desiredPrice);
         const printNotice = document.getElementById('printNotice').checked;
 
@@ -791,32 +769,41 @@ function wrapCanvasText(ctx, text, maxWidth) {
 }
 
 async function createMPB20LabelPdf(data) {
-    const widthPx = 384; // MP-B20 print width (48mm / 8dot)
-    const padding = 16;
+    const widthPx = 448; // widen to prevent horizontal overflow
+    const padding = 20;
     const contentWidth = widthPx - padding * 2;
     const canvas = document.createElement('canvas');
     const ctx = canvas.getContext('2d');
     const fontFamily = '"Hiragino Sans", "Hiragino Kaku Gothic ProN", "Yu Gothic", sans-serif';
 
-    const modelLines = data.modelNumber.includes('\n')
-        ? data.modelNumber.split('\n')
-        : splitText(data.modelNumber, 17);
+    const qrSize = Math.round(widthPx * 0.34);
 
-    let yEstimate = 40;
-    yEstimate += 34; // header
-    yEstimate += 28; // category
-    yEstimate += modelLines.length * 28 + 12;
-    yEstimate += data.operation ? 34 : 0;
-    if (data.purchasePrice) yEstimate += Number(data.purchasePrice) >= 100000 ? 52 : 28;
-    if (data.batteryCost) yEstimate += 28;
-    if (data.beltCost) yEstimate += 28;
-    yEstimate += 18;
-    yEstimate += 56; // price
+    // Model number: full-width digits + wrap by actual pixel width
+    const modelText = toFullWidth(String(data.modelNumber || ''));
+    const rawModelLines = modelText.split('\n');
+    ctx.font = 'bold 22px ' + fontFamily;
+    const modelLines = [];
+    rawModelLines.forEach(function(line) {
+        if (line === '') {
+            modelLines.push('');
+            return;
+        }
+        Array.prototype.push.apply(modelLines, wrapCanvasText(ctx, line, contentWidth));
+    });
+    if (modelLines.length === 0) modelLines.push('');
+
+    let yEstimate = 20;
+    yEstimate += 42; // header
+    if (data.category) yEstimate += 34; // category
+    yEstimate += modelLines.length * 28 + 10; // model
+    if (data.purchasePrice) yEstimate += 30;
+    if (data.batteryCost) yEstimate += 30;
+    if (data.beltCost) yEstimate += 30;
+    yEstimate += 10; // gap
+    yEstimate += 64; // desired
     if (data.printNotice) yEstimate += 78;
-    yEstimate += 28; // date
-    yEstimate += 150; // QR
-    yEstimate += 36; // qr number
-    yEstimate += 24;
+    yEstimate += 34; // date
+    yEstimate += qrSize + 74; // QR + digits
 
     canvas.width = widthPx;
     canvas.height = Math.ceil(yEstimate);
@@ -826,17 +813,24 @@ async function createMPB20LabelPdf(data) {
     ctx.textAlign = 'center';
     ctx.textBaseline = 'top';
 
-    let y = 24;
+    let y = 20;
     const centerX = widthPx / 2;
 
-    ctx.font = 'bold 28px ' + fontFamily;
-    ctx.fillText("T's time  " + data.serialNumber, centerX, y);
+    const serialDisplay = formatSerialDigits5FullWidth(data.serialNumber);
+
+    ctx.font = 'bold 30px ' + fontFamily;
+
+    ctx.textAlign = 'left';
+    ctx.fillText("T's time", padding, y);
+    ctx.textAlign = 'right';
+    ctx.fillText(serialDisplay, widthPx - padding, y);
+    ctx.textAlign = 'center';
     y += 42;
 
     if (data.category) {
-        ctx.font = '20px ' + fontFamily;
+        ctx.font = 'bold 22px ' + fontFamily;
         ctx.fillText(data.category, centerX, y);
-        y += 32;
+        y += 34;
     }
 
     ctx.font = 'bold 22px ' + fontFamily;
@@ -844,47 +838,33 @@ async function createMPB20LabelPdf(data) {
         ctx.fillText(line, centerX, y);
         y += 28;
     });
-    y += 10;
+    y += 8;
 
-    if (data.operation) {
-        ctx.font = '18px ' + fontFamily;
-        const operationLines = wrapCanvasText(ctx, data.operation, contentWidth);
-        operationLines.forEach(function(line) {
-            ctx.fillText(line, centerX, y);
-            y += 24;
-        });
-        y += 8;
-    }
+    // operation is omitted to match the reference layout
 
-    ctx.font = '18px ' + fontFamily;
+    ctx.font = 'bold 20px ' + fontFamily;
+    ctx.textAlign = 'left';
     if (data.purchasePrice) {
-        const priceNum = Number(data.purchasePrice);
-        if (priceNum >= 100000) {
-            ctx.fillText('購入価格', centerX, y);
-            y += 24;
-            ctx.fillText(priceNum.toLocaleString() + '円', centerX, y);
-            y += 28;
-        } else {
-            ctx.fillText('購入価格' + priceNum.toLocaleString() + '円', centerX, y);
-            y += 28;
-        }
+        ctx.fillText(buildPriceLine('購入価格', data.purchasePrice), padding, y);
+        y += 30;
     }
     if (data.batteryCost) {
-        ctx.fillText('電池代' + Number(data.batteryCost).toLocaleString() + '円', centerX, y);
-        y += 28;
+        ctx.fillText(buildPriceLine('電池代', data.batteryCost), padding, y);
+        y += 30;
     }
     if (data.beltCost) {
-        ctx.fillText('ベルト代' + Number(data.beltCost).toLocaleString() + '円', centerX, y);
-        y += 28;
+        ctx.fillText(buildPriceLine('ベルト代', data.beltCost), padding, y);
+        y += 30;
     }
 
     y += 10;
-    ctx.font = 'bold 42px ' + fontFamily;
-    ctx.fillText(Number(data.desiredPrice).toLocaleString() + '円', centerX, y);
-    y += 54;
+    ctx.textAlign = 'center';
+    ctx.font = 'bold 46px ' + fontFamily;
+    ctx.fillText(formatPriceDigits5FullWidth(data.desiredPrice) + '円', centerX, y);
+    y += 62;
 
     if (data.printNotice) {
-        ctx.font = '15px ' + fontFamily;
+        ctx.font = '18px ' + fontFamily;
         [
             '﹡大幅に金額が離れている場合は',
             'お売りする事が出来ません。',
@@ -896,20 +876,19 @@ async function createMPB20LabelPdf(data) {
         y += 8;
     }
 
-    ctx.font = '18px ' + fontFamily;
+    ctx.font = 'bold 20px ' + fontFamily;
     ctx.fillText(data.dateString, centerX, y);
     y += 34;
 
-    const qrSize = 128;
     const qrSource = await createQRCodeImage(data.dataURL, qrSize);
     ctx.drawImage(qrSource, (widthPx - qrSize) / 2, y, qrSize, qrSize);
-    y += qrSize + 12;
+    y += qrSize + 10;
 
-    ctx.font = '16px "Courier New", monospace';
+    ctx.font = '18px ' + fontFamily;
     ctx.fillText(data.qrcodeNumber, centerX, y);
-    y += 28;
+    y += 26;
 
-    const finalHeight = Math.min(Math.max(y + 16, 320), 1800);
+    const finalHeight = Math.min(Math.max(y + 18, 320), 2800);
     const exportCanvas = document.createElement('canvas');
     exportCanvas.width = widthPx;
     exportCanvas.height = finalHeight;
@@ -1026,6 +1005,46 @@ function toFullWidth(str) {
     return str.replace(/[0-9]/g, function(s) {
         return String.fromCharCode(s.charCodeAt(0) + 0xFEE0);
     });
+}
+
+function padWithZeros(value, length) {
+    const n = Number(value);
+    if (!Number.isFinite(n)) return '0'.repeat(length);
+    const int = Math.trunc(n);
+    const s = String(Math.max(0, int));
+    return s.padStart(length, '0');
+}
+
+function formatPriceDigits5FullWidth(value) {
+    return toFullWidth(padWithZeros(value, 5));
+}
+
+function formatSerialDigits5FullWidth(serialNumber) {
+    return toFullWidth(String(serialNumber).padStart(5, '0'));
+}
+
+function formatDateJPFullWidth(dateObj) {
+    const year = dateObj.getFullYear();
+    const month = dateObj.getMonth() + 1; // no leading zero (example)
+    const day = dateObj.getDate(); // no leading zero (example)
+    return `${toFullWidth(String(year))}年　${toFullWidth(String(month))}月　${toFullWidth(String(day))}日`;
+}
+
+function formatYMDDigits(dateObj) {
+    const y = dateObj.getFullYear();
+    const m = String(dateObj.getMonth() + 1).padStart(2, '0');
+    const d = String(dateObj.getDate()).padStart(2, '0');
+    return `${y}${m}${d}`;
+}
+
+function buildQrcodeNumberFullWidth(dateObj, serialNumber) {
+    const ymd = formatYMDDigits(dateObj);
+    const serial = String(serialNumber).padStart(5, '0');
+    return toFullWidth(ymd + serial);
+}
+
+function buildPriceLine(label, value) {
+    return `${label}${formatPriceDigits5FullWidth(value)}円`;
 }
 
 // Bluetooth接続で印刷
