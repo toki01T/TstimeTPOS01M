@@ -2,19 +2,24 @@
 <html lang="ja">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="default">
+    <meta name="format-detection" content="telephone=no">
     <title>T's time - 値札印刷システム</title>
     <link rel="stylesheet" href="style.css">
 </head>
 <body>
     <div class="container">
-        <header>
-            <button class="hamburger-menu" id="hamburgerMenu">
+        <header class="page-header">
+            <button class="hamburger-menu" id="hamburgerMenu" aria-label="メニューを開く">
                 <span></span>
                 <span></span>
                 <span></span>
             </button>
-            <h1>T's time</h1>
+            <div class="brand-block">
+                <h1>T's time</h1>
+            </div>
         </header>
 
         <!-- サイドメニュー -->
@@ -33,6 +38,9 @@
                         </button>
                         <button class="printer-option" id="tmAssistantOption" data-printer="tmassistant">
                             TM Assistant
+                        </button>
+                        <button class="printer-option" id="mpB20Option" data-printer="mpb20">
+                            MP-B20
                         </button>
                     </div>
                     <p class="printer-info" id="printerInfo">現在: Print Assist</p>
@@ -71,76 +79,86 @@
             </div>
         </div>
 
-        <main>
-            <div class="form-section">
-                <h2>値札作成</h2>
-                
-                <div class="form-group">
-                    <label for="categoryType">カテゴリー:</label>
-                    <select id="categoryType">
-                        <option value="メンズ腕時計">メンズ腕時計</option>
-                        <option value="ボーイズ腕時計">ボーイズ腕時計</option>
-                        <option value="レディース腕時計">レディース腕時計</option>
-                        <option value="other">その他（自由記入）</option>
-                    </select>
+        <main class="app-shell">
+            <section class="form-section">
+                <div class="section-heading">
+                    <h2>値札作成</h2>
                 </div>
 
-                <div class="form-group" id="otherCategoryGroup" style="display: none;">
-                    <label for="otherCategory">その他のカテゴリー:</label>
-                    <input type="text" id="otherCategory" placeholder="カテゴリーを入力" maxlength="30">
+                <div class="form-grid">
+                    <div class="form-group">
+                        <label for="categoryType">カテゴリー</label>
+                        <select id="categoryType">
+                            <option value="メンズ腕時計">メンズ腕時計</option>
+                            <option value="ボーイズ腕時計">ボーイズ腕時計</option>
+                            <option value="レディース腕時計">レディース腕時計</option>
+                            <option value="other">その他（自由記入）</option>
+                        </select>
+                    </div>
+
+                    <div class="form-group" id="otherCategoryGroup" style="display: none;">
+                        <label for="otherCategory">その他のカテゴリー</label>
+                        <input type="text" id="otherCategory" placeholder="カテゴリーを入力" maxlength="30">
+                    </div>
+
+                    <div class="form-group form-group-wide">
+                        <label for="modelNumber">型番</label>
+                        <textarea id="modelNumber" placeholder="例: ABC-123" maxlength="51" rows="3"></textarea>
+                    </div>
+
+                    <div class="form-group form-group-wide">
+                        <label for="operationType">稼働方式</label>
+                        <select id="operationType">
+                            <option value="クォーツ「稼働」">クォーツ「稼働」</option>
+                            <option value="クォーツ「未稼働」">クォーツ「未稼働」</option>
+                            <option value="クォーツ「不動」">クォーツ「不動」</option>
+                            <option value="ソーラー「稼働」">ソーラー「稼働」</option>
+                            <option value="ソーラー「未稼働」">ソーラー「未稼働」</option>
+                            <option value="ソーラー「不動」">ソーラー「不動」</option>
+                            <option value="ソーラー電波「稼働」">ソーラー電波「稼働」</option>
+                            <option value="ソーラー電波「未稼働」">ソーラー電波「未稼働」</option>
+                            <option value="ソーラー電波「不動」">ソーラー電波「不動」</option>
+                            <option value="自動巻き「稼働」">自動巻き「稼働」</option>
+                            <option value="自動巻き「未稼働」">自動巻き「未稼働」</option>
+                            <option value="自動巻き「不動」">自動巻き「不動」</option>
+                            <option value="キネティック(自動巻発電式ｸｫｰﾂ)「稼働」">キネティック(自動巻発電式ｸｫｰﾂ)「稼働」</option>
+                            <option value="キネティック(自動巻発電式ｸｫｰﾂ)「未稼働」">キネティック(自動巻発電式ｸｫｰﾂ)「未稼働」</option>
+                            <option value="キネティック(自動巻発電式ｸｫｰﾂ)「不動」">キネティック(自動巻発電式ｸｫｰﾂ)「不動」</option>
+                            <option value="other">その他（自由記入）</option>
+                        </select>
+                    </div>
+
+                    <div class="form-group form-group-wide" id="otherOperationGroup" style="display: none;">
+                        <label for="otherOperation">その他の稼働方式</label>
+                        <input type="text" id="otherOperation" placeholder="稼働方式を入力" maxlength="30">
+                    </div>
                 </div>
 
-                <div class="form-group">
-                    <label for="modelNumber">型番:</label>
-                    <textarea id="modelNumber" placeholder="例: ABC-123" maxlength="51" rows="3"></textarea>
-                    <small class="input-hint">17文字で自動改行されます（最大3行）</small>
-                </div>
+                <div class="price-panel">
+                    <div class="section-heading compact">
+                        <h3>価格情報</h3>
+                    </div>
+                    <div class="price-grid">
+                        <div class="form-group">
+                            <label for="purchasePrice">購入価格</label>
+                            <input type="number" id="purchasePrice" inputmode="numeric" placeholder="例: 5000">
+                        </div>
 
-                <div class="form-group">
-                    <label for="operationType">稼働方式:</label>
-                    <select id="operationType">
-                        <option value="クォーツ「稼働」">クォーツ「稼働」</option>
-                        <option value="クォーツ「未稼働」">クォーツ「未稼働」</option>
-                        <option value="クォーツ「不動」">クォーツ「不動」</option>
-                        <option value="ソーラー「稼働」">ソーラー「稼働」</option>
-                        <option value="ソーラー「未稼働」">ソーラー「未稼働」</option>
-                        <option value="ソーラー「不動」">ソーラー「不動」</option>
-                        <option value="ソーラー電波「稼働」">ソーラー電波「稼働」</option>
-                        <option value="ソーラー電波「未稼働」">ソーラー電波「未稼働」</option>
-                        <option value="ソーラー電波「不動」">ソーラー電波「不動」</option>
-                        <option value="自動巻き「稼働」">自動巻き「稼働」</option>
-                        <option value="自動巻き「未稼働」">自動巻き「未稼働」</option>
-                        <option value="自動巻き「不動」">自動巻き「不動」</option>
-                        <option value="キネティック(自動巻発電式ｸｫｰﾂ)「稼働」">キネティック(自動巻発電式ｸｫｰﾂ)「稼働」</option>
-                        <option value="キネティック(自動巻発電式ｸｫｰﾂ)「未稼働」">キネティック(自動巻発電式ｸｫｰﾂ)「未稼働」</option>
-                        <option value="キネティック(自動巻発電式ｸｫｰﾂ)「不動」">キネティック(自動巻発電式ｸｫｰﾂ)「不動」</option>
-                        <option value="other">その他（自由記入）</option>
-                    </select>
-                </div>
+                        <div class="form-group">
+                            <label for="batteryCost">電池代</label>
+                            <input type="number" id="batteryCost" inputmode="numeric" placeholder="例: 300">
+                        </div>
 
-                <div class="form-group" id="otherOperationGroup" style="display: none;">
-                    <label for="otherOperation">その他の稼働方式:</label>
-                    <input type="text" id="otherOperation" placeholder="稼働方式を入力" maxlength="30">
-                </div>
+                        <div class="form-group">
+                            <label for="beltCost">ベルト代</label>
+                            <input type="number" id="beltCost" inputmode="numeric" placeholder="例: 500">
+                        </div>
 
-                <div class="form-group">
-                    <label for="purchasePrice">購入価格:</label>
-                    <input type="number" id="purchasePrice" placeholder="例: 5000">
-                </div>
-
-                <div class="form-group">
-                    <label for="batteryCost">電池代:</label>
-                    <input type="number" id="batteryCost" placeholder="例: 300">
-                </div>
-
-                <div class="form-group">
-                    <label for="beltCost">ベルト代:</label>
-                    <input type="number" id="beltCost" placeholder="例: 500">
-                </div>
-
-                <div class="form-group">
-                    <label for="desiredPrice">金額:</label>
-                    <input type="number" id="desiredPrice" placeholder="例: 8000">
+                        <div class="form-group price-accent">
+                            <label for="desiredPrice">金額</label>
+                            <input type="number" id="desiredPrice" inputmode="numeric" placeholder="例: 8000">
+                        </div>
+                    </div>
                 </div>
 
                 <div class="form-group toggle-group">
@@ -151,10 +169,8 @@
                             <span class="toggle-slider"></span>
                         </div>
                     </label>
-                    <small class="toggle-hint">※大幅に金額が離れている場合はお売りする事が出来ません。ご了承下さい。</small>
                 </div>
-
-            </div>
+            </section>
 
             <div class="button-section">
                 <button id="printBtn" class="btn-primary">印刷</button>
@@ -165,11 +181,14 @@
         </main>
     </div>
 
+    <div id="qrcodeTemp" class="qrcode-temp" aria-hidden="true"></div>
+
     <script>
         // ePOS-Print SDKのロードエラーを処理
         window.epsonSDKLoaded = false;
     </script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
     <script src="epos-2.27.0.js" onerror="console.warn('ePOS SDK not loaded')"></script>
     <script src="app.js"></script>
 </body>

@@ -27,7 +27,7 @@ function loadSerialNumber() {
 }
 
 function updateSerialDisplay() {
-    const currentSerial = document.getElementById('serialNumber').value;
+    const currentSerial = loadSerialNumber();
     const display = document.getElementById('currentSerial');
     if (display) {
         display.textContent = currentSerial;
@@ -48,16 +48,29 @@ function loadPrinterSelection() {
 function updatePrinterDisplay(printer) {
     const printAssistBtn = document.getElementById('printAssistOption');
     const tmAssistantBtn = document.getElementById('tmAssistantOption');
+    const mpB20Btn = document.getElementById('mpB20Option');
     const printerInfo = document.getElementById('printerInfo');
-    
-    if (printer === 'printassist') {
-        printAssistBtn.classList.add('active');
-        tmAssistantBtn.classList.remove('active');
-        printerInfo.textContent = '現在: Print Assist';
-    } else {
+    const labels = {
+        printassist: 'Print Assist',
+        tmassistant: 'TM Assistant',
+        mpb20: 'MP-B20'
+    };
+
+    [printAssistBtn, tmAssistantBtn, mpB20Btn].forEach(function(btn) {
+        if (btn) btn.classList.remove('active');
+    });
+
+    if (printer === 'tmassistant' && tmAssistantBtn) {
         tmAssistantBtn.classList.add('active');
-        printAssistBtn.classList.remove('active');
-        printerInfo.textContent = '現在: TM Assistant';
+    } else if (printer === 'mpb20' && mpB20Btn) {
+        mpB20Btn.classList.add('active');
+    } else if (printAssistBtn) {
+        printAssistBtn.classList.add('active');
+        printer = 'printassist';
+    }
+
+    if (printerInfo) {
+        printerInfo.textContent = '現在: ' + (labels[printer] || 'Print Assist');
     }
 }
 
@@ -69,6 +82,7 @@ document.addEventListener('DOMContentLoaded', function() {
     // 保存された連番を読み込む（内部管理のみ）
     const savedSerial = loadSerialNumber();
     console.log('保存された連番を読み込みました:', savedSerial);
+    updateSerialDisplay();
     
     // 保存されたプリンター選択を読み込む
     const savedPrinter = loadPrinterSelection();
@@ -86,6 +100,12 @@ document.addEventListener('DOMContentLoaded', function() {
         savePrinterSelection('tmassistant');
         updatePrinterDisplay('tmassistant');
         showMessage('プリンターをTM Assistantに設定しました', 'success');
+    });
+
+    document.getElementById('mpB20Option').addEventListener('click', function() {
+        savePrinterSelection('mpb20');
+        updatePrinterDisplay('mpb20');
+        showMessage('プリンターをMP-B20に設定しました', 'success');
     });
     
     // ハンバーガーメニューの設定
@@ -262,13 +282,16 @@ function printLabel() {
     }
     
     if (selectedPrinter === 'printassist') {
-        // Print Assist印刷
         console.log('Print Assist印刷を使用');
         printWithPrintAssist(serialNumber, modelNumber, category, operation, purchasePrice, batteryCost, beltCost, desiredPrice);
-    } else {
-        // TM Assistant印刷
+    } else if (selectedPrinter === 'tmassistant') {
         console.log('TM Assistant印刷を使用');
         printWithTMAssistant(serialNumber, modelNumber, category, operation, purchasePrice, batteryCost, beltCost, desiredPrice);
+    } else if (selectedPrinter === 'mpb20') {
+        console.log('MP-B20印刷を使用');
+        printWithMPB20(serialNumber, modelNumber, category, operation, purchasePrice, batteryCost, beltCost, desiredPrice);
+    } else {
+        showMessage('プリンター選択が不正です', 'error');
     }
 }
 
@@ -611,6 +634,299 @@ function printWithTMAssistant(serialNumber, modelNumber, category, operation, pu
     }
 }
 
+// MP-B20印刷（SII URL Print Agent経由）
+async function printWithMPB20(serialNumber, modelNumber, category, operation, purchasePrice, batteryCost, beltCost, desiredPrice) {
+    console.log('=== MP-B20印刷開始 ===');
+
+    if (!confirm('MP-B20で印刷します。\n\n「SII URL Print Agent」がインストールされていますか？\n\n「OK」= インストール済み（印刷実行）\n「キャンセル」= 未インストール（App Storeへ移動）')) {
+        window.location.href = 'https://apps.apple.com/jp/app/sii-url-print-agent/id1502527506';
+        showMessage('App StoreからSII URL Print Agentをインストールしてください', 'error');
+        return;
+    }
+
+    try {
+        if (!window.jspdf || !window.jspdf.jsPDF) {
+            throw new Error('PDF生成ライブラリの読み込みに失敗しました');
+        }
+        if (typeof QRCode === 'undefined') {
+            throw new Error('QRコードライブラリの読み込みに失敗しました');
+        }
+
+        showMessage('MP-B20用の印刷データを作成中...', 'success');
+
+        const now = new Date();
+        const dateString = `${now.getFullYear()}年${(now.getMonth()+1).toString().padStart(2,'0')}月${now.getDate().toString().padStart(2,'0')}日`;
+        const qrcodeNumber = `${now.getFullYear()}${(now.getMonth()+1).toString().padStart(2,'0')}${now.getDate().toString().padStart(2,'0')}${serialNumber.padStart(5, '0')}`;
+        const dataURL = generateDataURL(modelNumber, category, operation, purchasePrice, batteryCost, beltCost, desiredPrice);
+        const printNotice = document.getElementById('printNotice').checked;
+
+        const pdfBase64 = await createMPB20LabelPdf({
+            serialNumber: serialNumber.padStart(5, '0'),
+            modelNumber: modelNumber,
+            category: category,
+            operation: operation,
+            purchasePrice: purchasePrice,
+            batteryCost: batteryCost,
+            beltCost: beltCost,
+            desiredPrice: desiredPrice,
+            dateString: dateString,
+            qrcodeNumber: qrcodeNumber,
+            dataURL: dataURL,
+            printNotice: printNotice
+        });
+
+        const callbackPage = window.location.href.split('#')[0].split('?')[0];
+        const printURL =
+            'siiprintagent://1.0/print?' +
+            'CallbackSuccess=' + encodeURIComponent(callbackPage) + '&' +
+            'CallbackFail=' + encodeURIComponent(callbackPage) + '&' +
+            'BtKeepConnect=always&' +
+            'Format=pdf&' +
+            'Data=' + encodeURIComponent(pdfBase64) + '&' +
+            'ErrorDialog=yes&' +
+            'SelectOnError=yes&' +
+            'PaperWidth=58&' +
+            'FitToWidth=yes&' +
+            'CutType=off&' +
+            'CutFeed=yes&' +
+            'Dither=yes';
+
+        console.log('MP-B20 URL scheme length:', printURL.length);
+
+        saveToHistory(serialNumber, modelNumber, category, operation, purchasePrice, batteryCost, beltCost, desiredPrice);
+        const newSerial = parseInt(serialNumber, 10) + 1;
+        saveSerialNumber(newSerial);
+        updateSerialDisplay();
+        updatePreview();
+
+        setTimeout(function() {
+            const link = document.createElement('a');
+            link.href = printURL;
+            link.style.display = 'none';
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+            showMessage('SII URL Print Agentへ送信しました。連番を ' + newSerial + ' に更新しました。', 'success');
+        }, 300);
+    } catch (error) {
+        console.error('=== MP-B20印刷エラー ===', error);
+        showMessage('MP-B20印刷エラー: ' + error.message, 'error');
+    }
+}
+
+function waitForNextFrame() {
+    return new Promise(function(resolve) {
+        requestAnimationFrame(function() {
+            requestAnimationFrame(resolve);
+        });
+    });
+}
+
+function createQRCodeImage(text, size) {
+    return new Promise(function(resolve, reject) {
+        const host = document.getElementById('qrcodeTemp');
+        if (!host) {
+            reject(new Error('QRコード生成領域がありません'));
+            return;
+        }
+
+        host.innerHTML = '';
+        try {
+            new QRCode(host, {
+                text: text,
+                width: size,
+                height: size,
+                correctLevel: QRCode.CorrectLevel.M
+            });
+        } catch (error) {
+            reject(error);
+            return;
+        }
+
+        setTimeout(function() {
+            const canvas = host.querySelector('canvas');
+            const img = host.querySelector('img');
+            if (canvas) {
+                resolve(canvas);
+                return;
+            }
+            if (img) {
+                if (img.complete) {
+                    resolve(img);
+                } else {
+                    img.onload = function() { resolve(img); };
+                    img.onerror = function() { reject(new Error('QRコード画像の生成に失敗しました')); };
+                }
+                return;
+            }
+            reject(new Error('QRコードの生成に失敗しました'));
+        }, 80);
+    });
+}
+
+function wrapCanvasText(ctx, text, maxWidth) {
+    const chars = String(text || '').split('');
+    const lines = [];
+    let current = '';
+
+    chars.forEach(function(ch) {
+        const test = current + ch;
+        if (ctx.measureText(test).width > maxWidth && current) {
+            lines.push(current);
+            current = ch;
+        } else {
+            current = test;
+        }
+    });
+
+    if (current) lines.push(current);
+    return lines.length ? lines : [''];
+}
+
+async function createMPB20LabelPdf(data) {
+    const widthPx = 384; // MP-B20 print width (48mm / 8dot)
+    const padding = 16;
+    const contentWidth = widthPx - padding * 2;
+    const canvas = document.createElement('canvas');
+    const ctx = canvas.getContext('2d');
+    const fontFamily = '"Hiragino Sans", "Hiragino Kaku Gothic ProN", "Yu Gothic", sans-serif';
+
+    const modelLines = data.modelNumber.includes('\n')
+        ? data.modelNumber.split('\n')
+        : splitText(data.modelNumber, 17);
+
+    let yEstimate = 40;
+    yEstimate += 34; // header
+    yEstimate += 28; // category
+    yEstimate += modelLines.length * 28 + 12;
+    yEstimate += data.operation ? 34 : 0;
+    if (data.purchasePrice) yEstimate += Number(data.purchasePrice) >= 100000 ? 52 : 28;
+    if (data.batteryCost) yEstimate += 28;
+    if (data.beltCost) yEstimate += 28;
+    yEstimate += 18;
+    yEstimate += 56; // price
+    if (data.printNotice) yEstimate += 78;
+    yEstimate += 28; // date
+    yEstimate += 150; // QR
+    yEstimate += 36; // qr number
+    yEstimate += 24;
+
+    canvas.width = widthPx;
+    canvas.height = Math.ceil(yEstimate);
+    ctx.fillStyle = '#ffffff';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    ctx.fillStyle = '#000000';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'top';
+
+    let y = 24;
+    const centerX = widthPx / 2;
+
+    ctx.font = 'bold 28px ' + fontFamily;
+    ctx.fillText("T's time  " + data.serialNumber, centerX, y);
+    y += 42;
+
+    if (data.category) {
+        ctx.font = '20px ' + fontFamily;
+        ctx.fillText(data.category, centerX, y);
+        y += 32;
+    }
+
+    ctx.font = 'bold 22px ' + fontFamily;
+    modelLines.forEach(function(line) {
+        ctx.fillText(line, centerX, y);
+        y += 28;
+    });
+    y += 10;
+
+    if (data.operation) {
+        ctx.font = '18px ' + fontFamily;
+        const operationLines = wrapCanvasText(ctx, data.operation, contentWidth);
+        operationLines.forEach(function(line) {
+            ctx.fillText(line, centerX, y);
+            y += 24;
+        });
+        y += 8;
+    }
+
+    ctx.font = '18px ' + fontFamily;
+    if (data.purchasePrice) {
+        const priceNum = Number(data.purchasePrice);
+        if (priceNum >= 100000) {
+            ctx.fillText('購入価格', centerX, y);
+            y += 24;
+            ctx.fillText(priceNum.toLocaleString() + '円', centerX, y);
+            y += 28;
+        } else {
+            ctx.fillText('購入価格' + priceNum.toLocaleString() + '円', centerX, y);
+            y += 28;
+        }
+    }
+    if (data.batteryCost) {
+        ctx.fillText('電池代' + Number(data.batteryCost).toLocaleString() + '円', centerX, y);
+        y += 28;
+    }
+    if (data.beltCost) {
+        ctx.fillText('ベルト代' + Number(data.beltCost).toLocaleString() + '円', centerX, y);
+        y += 28;
+    }
+
+    y += 10;
+    ctx.font = 'bold 42px ' + fontFamily;
+    ctx.fillText(Number(data.desiredPrice).toLocaleString() + '円', centerX, y);
+    y += 54;
+
+    if (data.printNotice) {
+        ctx.font = '15px ' + fontFamily;
+        [
+            '﹡大幅に金額が離れている場合は',
+            'お売りする事が出来ません。',
+            'ご了承下さい。'
+        ].forEach(function(line) {
+            ctx.fillText(line, centerX, y);
+            y += 22;
+        });
+        y += 8;
+    }
+
+    ctx.font = '18px ' + fontFamily;
+    ctx.fillText(data.dateString, centerX, y);
+    y += 34;
+
+    const qrSize = 128;
+    const qrSource = await createQRCodeImage(data.dataURL, qrSize);
+    ctx.drawImage(qrSource, (widthPx - qrSize) / 2, y, qrSize, qrSize);
+    y += qrSize + 12;
+
+    ctx.font = '16px "Courier New", monospace';
+    ctx.fillText(data.qrcodeNumber, centerX, y);
+    y += 28;
+
+    const finalHeight = Math.min(Math.max(y + 16, 320), 1800);
+    const exportCanvas = document.createElement('canvas');
+    exportCanvas.width = widthPx;
+    exportCanvas.height = finalHeight;
+    const exportCtx = exportCanvas.getContext('2d');
+    exportCtx.fillStyle = '#ffffff';
+    exportCtx.fillRect(0, 0, exportCanvas.width, exportCanvas.height);
+    exportCtx.drawImage(canvas, 0, 0);
+
+    await waitForNextFrame();
+
+    const imgData = exportCanvas.toDataURL('image/jpeg', 0.92);
+    const widthMm = 48;
+    const heightMm = widthMm * (exportCanvas.height / exportCanvas.width);
+    const { jsPDF } = window.jspdf;
+    const pdf = new jsPDF({
+        orientation: 'portrait',
+        unit: 'mm',
+        format: [widthMm, heightMm],
+        compress: true
+    });
+    pdf.addImage(imgData, 'JPEG', 0, 0, widthMm, heightMm);
+    return pdf.output('datauristring').split(',')[1];
+}
+
 // XML特殊文字エスケープ
 function escapeXml(str) {
     return str.replace(/&/g, '&amp;')
@@ -901,7 +1217,8 @@ function executePrint(eposDevice, serialNumber, modelNumber, purchasePrice, batt
                 showMessage('印刷を開始しました！', 'success');
                 
                 // 連番を自動的に1増やす
-                document.getElementById('serialNumber').value = parseInt(serialNumber) + 1;
+                saveSerialNumber(parseInt(serialNumber) + 1);
+                updateSerialDisplay();
                 updatePreview();
                 
                 eposDevice.disconnect();
