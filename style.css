@@ -858,7 +858,8 @@ body {
 
     .side-menu {
         width: min(100vw, 340px);
-        right: calc(-1 * min(100vw, 340px) - 24px);
+        /* For iPhone, avoid calc-based hiding; use right:-100% to fully hide. */
+        right: -100%;
         padding-bottom: env(safe-area-inset-bottom);
     }
 

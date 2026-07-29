@@ -686,10 +686,10 @@ async function printWithMPB20(serialNumber, modelNumber, category, operation, pu
             'ErrorDialog=yes&' +
             'SelectOnError=yes&' +
             'PaperWidth=58&' +
-            'FitToWidth=yes&' +
+            'FitToWidth=no&' +
             'CutType=off&' +
-            'CutFeed=yes&' +
-            'Dither=yes';
+            'CutFeed=no&' +
+            'Dither=no';
 
         console.log('MP-B20 URL scheme length:', printURL.length);
 
@@ -736,31 +736,38 @@ function createQRCodeImage(text, size) {
                 text: text,
                 width: size,
                 height: size,
-                correctLevel: QRCode.CorrectLevel.M
+                correctLevel: QRCode.CorrectLevel.M,
+                background: '#ffffff',
+                foreground: '#000000'
             });
         } catch (error) {
             reject(error);
             return;
         }
 
-        setTimeout(function() {
+        // Wait for QR render completion (fixed timeouts can cause broken output on iOS).
+        const start = Date.now();
+        const timeoutMs = 1000;
+        (function poll() {
             const canvas = host.querySelector('canvas');
-            const img = host.querySelector('img');
-            if (canvas) {
+            if (canvas && canvas.width > 0) {
                 resolve(canvas);
                 return;
             }
-            if (img) {
-                if (img.complete) {
-                    resolve(img);
-                } else {
-                    img.onload = function() { resolve(img); };
-                    img.onerror = function() { reject(new Error('QRコード画像の生成に失敗しました')); };
-                }
+
+            const img = host.querySelector('img');
+            if (img && img.complete && img.naturalWidth > 0) {
+                resolve(img);
                 return;
             }
-            reject(new Error('QRコードの生成に失敗しました'));
-        }, 80);
+
+            if (Date.now() - start > timeoutMs) {
+                reject(new Error('QR code render timeout'));
+                return;
+            }
+
+            setTimeout(poll, 50);
+        })();
     });
 }
 
@@ -914,7 +921,8 @@ async function createMPB20LabelPdf(data) {
     await waitForNextFrame();
 
     const imgData = exportCanvas.toDataURL('image/jpeg', 0.92);
-    const widthMm = 48;
+    // Match PaperWidth=58 (no extra scaling via FitToWidth).
+    const widthMm = 58;
     const heightMm = widthMm * (exportCanvas.height / exportCanvas.width);
     const { jsPDF } = window.jspdf;
     const pdf = new jsPDF({
