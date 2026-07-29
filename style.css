@@ -409,9 +409,16 @@ body {
     transform: translateX(26px);
 }
 
+.scroll-end-marker {
+    height: 1px;
+    width: 100%;
+    pointer-events: none;
+}
+
 .button-section {
     display: flex;
     gap: 14px;
+    transition: opacity 0.25s ease, visibility 0.25s ease;
 }
 
 .btn-primary,
@@ -840,11 +847,28 @@ body {
         font-size: 1.25rem;
     }
 
+    main {
+        min-height: calc(100dvh + 80px);
+    }
+
+    .scroll-spacer {
+        min-height: 32vh;
+    }
+
     .button-section {
         flex-direction: column;
         z-index: 20;
         padding-top: 4px;
         padding-bottom: env(safe-area-inset-bottom);
+        opacity: 0;
+        visibility: hidden;
+        pointer-events: none;
+    }
+
+    .button-section.is-visible {
+        opacity: 1;
+        visibility: visible;
+        pointer-events: auto;
     }
 
     .btn-primary,
