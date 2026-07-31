@@ -24,6 +24,8 @@
     --radius-lg: 20px;
     --radius-md: 16px;
     --radius-sm: 12px;
+    /* 印刷履歴を画面中央より上に寄せる量 */
+    --history-lift: 25mm;
 }
 
 body {
@@ -51,8 +53,9 @@ body {
     padding: 32px;
     border: 1px solid rgba(255, 255, 255, 0.65);
     border-radius: var(--radius-xl);
-    background: rgba(255, 255, 255, 0.72);
-    backdrop-filter: blur(16px);
+    /* backdrop-filter は fixed 要素の基準を .container にしてしまうため使わない
+       （サイドメニュー・履歴モーダルが画面ではなくカードを基準に配置されてしまう） */
+    background: rgba(255, 255, 255, 0.86);
     box-shadow: var(--shadow-lg);
 }
 
@@ -618,9 +621,10 @@ body {
     position: fixed;
     top: 50%;
     left: 50%;
-    transform: translate(-50%, -50%);
+    transform: translate(-50%, calc(-50% - var(--history-lift)));
     width: min(92vw, 640px);
-    max-height: 82vh;
+    /* 上に寄せた分だけ縮めて、画面上端からはみ出さないようにする */
+    max-height: min(82vh, calc(100vh - 2 * var(--history-lift) - 40px));
     z-index: 1001;
     overflow: hidden;
     border-radius: 24px;
@@ -883,8 +887,7 @@ body {
 
     .history-modal {
         width: 94vw;
-        max-height: 86vh;
-        top: max(50%, calc(env(safe-area-inset-top) + 50%));
+        max-height: min(86vh, calc(100vh - 2 * var(--history-lift) - 2 * env(safe-area-inset-top) - 40px));
     }
 
     .history-list {
