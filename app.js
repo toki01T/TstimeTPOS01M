@@ -357,6 +357,8 @@ function buildLabelPrintData(serialNumber, modelNumber, category, operation, pur
         ? normalizedModelNumber.split('\n')
         : splitText(normalizedModelNumber, 17);
 
+    const operationLines = operation ? splitOperationText(toFullWidth(operation)) : [];
+
     const priceLines = [];
     if (purchasePrice) priceLines.push(buildPriceLine('購入価格', purchasePrice));
     if (batteryCost) priceLines.push(buildPriceLine('電池代', batteryCost));
@@ -366,6 +368,7 @@ function buildLabelPrintData(serialNumber, modelNumber, category, operation, pur
         headerLine: `T❜s time   ${formatSerialDigits5FullWidth(serialNumber)}`,
         category: category || '',
         modelLines: modelLines,
+        operationLines: operationLines,
         priceLines: priceLines,
         desiredLine: formatPriceFullWidth(desiredPrice) + '円',
         printNotice: printNotice,
@@ -399,6 +402,13 @@ function buildEposPrintXml(labelData) {
         xml += `<text>${escapeXml(line)}&#10;</text>`;
     }
     xml += '<text>&#10;</text>';
+
+    for (let line of labelData.operationLines) {
+        xml += `<text>${escapeXml(line)}&#10;</text>`;
+    }
+    if (labelData.operationLines.length) {
+        xml += '<text>&#10;</text>';
+    }
 
     for (let line of labelData.priceLines) {
         xml += `<text>${escapeXml(line)}&#10;</text>`;
@@ -832,6 +842,8 @@ async function createMPB20LabelPdf(labelData) {
     let yEstimate = paddingTop + fonts.header.line + blockGapPx;
     if (labelData.category) yEstimate += fonts.body.line + blockGapPx;
     yEstimate += labelData.modelLines.length * fonts.body.line + 14;
+    yEstimate += labelData.operationLines.length * fonts.body.line;
+    if (labelData.operationLines.length) yEstimate += 14;
     yEstimate += labelData.priceLines.length * fonts.price.line;
     if (labelData.priceLines.length) yEstimate += 14;
     yEstimate += fonts.desired.line;
@@ -856,6 +868,14 @@ async function createMPB20LabelPdf(labelData) {
             y += fonts.body.line;
         });
         y += 14;
+
+        labelData.operationLines.forEach(function(line) {
+            drawFittedLine(ctx, line, centerX, y, contentWidthPx, fontFamily, fonts.body.size, fonts.body.weight);
+            y += fonts.body.line;
+        });
+        if (labelData.operationLines.length) {
+            y += 14;
+        }
 
         labelData.priceLines.forEach(function(line) {
             drawFittedLine(ctx, line, centerX, y, contentWidthPx, fontFamily, fonts.price.size, fonts.price.weight);
@@ -955,6 +975,37 @@ function splitText(text, maxLength) {
         lines.push(text.substring(i, i + maxLength));
     }
     return lines;
+}
+
+// 半角を1、全角を2として行の幅を数える（58mm用紙は1行あたり半角32文字）
+const PRINT_LINE_UNITS = 32;
+
+function textWidthUnits(text) {
+    let units = 0;
+    for (const ch of text) {
+        const code = ch.codePointAt(0);
+        const halfWidth = (code >= 0x20 && code <= 0x7e) || (code >= 0xff61 && code <= 0xff9f);
+        units += halfWidth ? 1 : 2;
+    }
+    return units;
+}
+
+// 稼働方式は「稼働」「未稼働」の括弧の前で折り返す。
+// 文字数だけで切ると「キネティック(自動巻発電式ｸｫｰﾂ」「)「稼働」」のように
+// 閉じ括弧が行頭へ落ちて読みにくくなる
+function splitOperationText(text) {
+    if (textWidthUnits(text) <= PRINT_LINE_UNITS) return [text];
+
+    const bracket = text.indexOf('「');
+    if (bracket > 0) {
+        const head = text.slice(0, bracket);
+        const tail = text.slice(bracket);
+        if (textWidthUnits(head) <= PRINT_LINE_UNITS && textWidthUnits(tail) <= PRINT_LINE_UNITS) {
+            return [head, tail];
+        }
+    }
+
+    return splitText(text, 17);
 }
 
 // テキストエリアの自動改行処理（17文字ごと）
