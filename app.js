@@ -201,8 +201,29 @@ document.addEventListener('DOMContentLoaded', function() {
     // リアルタイムプレビューの設定
     const modelNumberField = document.getElementById('modelNumber');
     
+    // かな漢字変換の途中で値を書き換えると、確定時にIMEが変換前の内容へ戻してしまい、
+    // 17文字を超えた行がそのまま残ったり、1文字だけ別の行に取り残されたりする。
+    // 変換中は折り返さず、確定した時点でまとめて折り返す
+    let modelNumberComposing = false;
+
+    modelNumberField.addEventListener('compositionstart', function() {
+        modelNumberComposing = true;
+    });
+
+    modelNumberField.addEventListener('compositionend', function() {
+        modelNumberComposing = false;
+        autoLineBreakSmart(this, 17);
+        autoGrowTextarea(this);
+        updatePreview();
+    });
+
     // 型番の自由編集（手動改行可能、自動改行も行う）
     modelNumberField.addEventListener('input', function(e) {
+        if (modelNumberComposing || e.isComposing) {
+            autoGrowTextarea(this);
+            return;
+        }
+
         // 17文字ごとに自動改行（手動改行も考慮）
         autoLineBreakSmart(this, 17);
         autoGrowTextarea(this);
@@ -244,9 +265,13 @@ document.addEventListener('DOMContentLoaded', function() {
     const versionLabel = document.getElementById('appVersion');
     if (versionLabel) versionLabel.textContent = APP_VERSION;
 
-    // webapp://は登録時のURLと完全一致しないと開かないため、実際に使う値を見せる
+    // webapp://は登録時のURLと完全一致しないと開かないため、照合する値を見せる
     const returnLabel = document.getElementById('returnTarget');
-    if (returnLabel) returnLabel.textContent = getPrintReturnUrl() || '(なし)';
+    if (returnLabel) {
+        returnLabel.textContent = isStandaloneWebApp()
+            ? buildWebAppReturnUrls().primary
+            : getPrintReturnUrl();
+    }
 });
 
 // プレビュー更新関数（プレビュー表示は削除されたが、内部処理のため残す）
@@ -451,18 +476,33 @@ function isStandaloneWebApp() {
            (window.matchMedia && window.matchMedia('(display-mode: standalone)').matches);
 }
 
-// 印刷アプリからの戻り先URL。
 // ホーム画面のWebアプリはhttpsのURLでは開けず、渡してもSafariが別に開いてしまう。
-// webapp://スキームだけがインストール済みのWebアプリ本体を起動できる。
-// 追加した時のURLと1文字でも違うと開けないため、
-// 起動中のWebアプリ自身のURLからそのまま組み立てる
-function buildWebAppReturnUrl() {
-    return 'webapp://' + window.location.host + window.location.pathname;
+// インストール済みのWebアプリ本体を起動できるのはwebapp://スキームだけ。
+// ただしホーム画面へ追加した時のURLと1文字でも違うと開けないため、
+// 「/」で終わる形と「index.html」で終わる形の両方を用意しておく
+function buildWebAppReturnUrls() {
+    const host = window.location.host;
+    const path = window.location.pathname;
+    const primary = 'webapp://' + host + path;
+    const alternate = path.endsWith('/')
+        ? 'webapp://' + host + path + 'index.html'
+        : 'webapp://' + host + path.replace(/[^/]*$/, '');
+
+    return { primary: primary, alternate: alternate };
 }
 
+// 印刷アプリからの戻り先URL。
+// 印刷アプリにwebapp://を直接渡すと開けずに終わることがあるので、
+// 必ず開けるhttpsの中継ページを挟み、そこからWebアプリ本体へ渡す
 function getPrintReturnUrl() {
-    if (isStandaloneWebApp()) return buildWebAppReturnUrl();
-    return window.location.href.split('#')[0];
+    const base = window.location.origin + window.location.pathname;
+    if (!isStandaloneWebApp()) return base;
+
+    const targets = buildWebAppReturnUrls();
+    const directory = window.location.origin + window.location.pathname.replace(/[^/]*$/, '');
+    return directory + 'return.html' +
+        '?to=' + encodeURIComponent(targets.primary) +
+        '&alt=' + encodeURIComponent(targets.alternate);
 }
 
 // PrintAssist印刷（iPad/iPhone）
@@ -1052,48 +1092,41 @@ function autoLineBreakForPaste(textarea, maxCharsPerLine) {
     textarea.value = formatted.join('\n');
 }
 
-// 改行を挿入した後のカーソル位置を求める
-// 挿入前と同じ文字数だけ進んだ位置まで送り、途中で挿入された改行は読み飛ばす
-function shiftCursorPastInsertedBreaks(oldValue, newValue, cursorPos) {
-    let oldIndex = 0;
-    let newIndex = 0;
+// 手動改行を残したまま17文字で折り返し、カーソルの移動先も同時に求める。
+// 折り返しの前後で文字の並びは変わらないので、元の文字を1つずつ書き写しながら
+// カーソルが何文字目にあったかを追いかければ、挿入した改行の分だけ正確にずれる
+function wrapWithCursor(value, maxCharsPerLine, cursorPos) {
+    const lines = value.split('\n');
+    let out = '';
+    let readCount = 0;
+    let cursor = null;
 
-    while (oldIndex < cursorPos && newIndex < newValue.length) {
-        if (oldValue[oldIndex] === newValue[newIndex]) {
-            oldIndex++;
+    for (let i = 0; i < lines.length; i++) {
+        if (i > 0) {
+            if (readCount === cursorPos && cursor === null) cursor = out.length;
+            out += '\n';
+            readCount++;
         }
-        newIndex++;
+
+        const line = lines[i];
+        for (let j = 0; j < line.length; j++) {
+            if (j > 0 && j % maxCharsPerLine === 0) out += '\n';
+            if (readCount === cursorPos && cursor === null) cursor = out.length;
+            out += line[j];
+            readCount++;
+        }
     }
 
-    return newIndex;
+    return { value: out, cursor: cursor === null ? out.length : cursor };
 }
 
 // スマートな自動改行（手動改行を保持しつつ、17文字超過を自動分割）
 function autoLineBreakSmart(textarea, maxCharsPerLine) {
-    const cursorPos = textarea.selectionStart;
-    const oldValue = textarea.value;
-    const lines = oldValue.split('\n');
-    let formatted = [];
+    const wrapped = wrapWithCursor(textarea.value, maxCharsPerLine, textarea.selectionStart);
+    if (wrapped.value === textarea.value) return;
 
-    for (let i = 0; i < lines.length; i++) {
-        const line = lines[i];
-
-        if (line.length > maxCharsPerLine) {
-            // 17文字を超える行は自動分割
-            for (let j = 0; j < line.length; j += maxCharsPerLine) {
-                formatted.push(line.substring(j, j + maxCharsPerLine));
-            }
-        } else {
-            formatted.push(line);
-        }
-    }
-
-    const newValue = formatted.join('\n');
-    if (oldValue !== newValue) {
-        textarea.value = newValue;
-        const newCursorPos = shiftCursorPastInsertedBreaks(oldValue, newValue, cursorPos);
-        textarea.setSelectionRange(newCursorPos, newCursorPos);
-    }
+    textarea.value = wrapped.value;
+    textarea.setSelectionRange(wrapped.cursor, wrapped.cursor);
 }
 
 // 半角数字を全角数字に変換
