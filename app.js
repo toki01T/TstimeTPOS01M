@@ -687,53 +687,65 @@ function waitForNextFrame() {
     });
 }
 
-function createQRCodeImage(text, size) {
-    return new Promise(function(resolve, reject) {
-        const host = document.getElementById('qrcodeTemp');
-        if (!host) {
-            reject(new Error('QRコード生成領域がありません'));
-            return;
-        }
+// QRのセル配置だけを取り出す（ライブラリの描画は使わない）
+function buildQRModules(text) {
+    const host = document.getElementById('qrcodeTemp');
+    if (!host) throw new Error('QRコード生成領域がありません');
 
-        host.innerHTML = '';
-        try {
-            new QRCode(host, {
-                text: text,
-                width: size,
-                height: size,
-                correctLevel: QRCode.CorrectLevel.M,
-                background: '#ffffff',
-                foreground: '#000000'
-            });
-        } catch (error) {
-            reject(error);
-            return;
-        }
-
-        // Wait for QR render completion (fixed timeouts can cause broken output on iOS).
-        const start = Date.now();
-        const timeoutMs = 1000;
-        (function poll() {
-            const canvas = host.querySelector('canvas');
-            if (canvas && canvas.width > 0) {
-                resolve(canvas);
-                return;
-            }
-
-            const img = host.querySelector('img');
-            if (img && img.complete && img.naturalWidth > 0) {
-                resolve(img);
-                return;
-            }
-
-            if (Date.now() - start > timeoutMs) {
-                reject(new Error('QR code render timeout'));
-                return;
-            }
-
-            setTimeout(poll, 50);
-        })();
+    host.innerHTML = '';
+    const qr = new QRCode(host, {
+        text: text,
+        width: 64,
+        height: 64,
+        correctLevel: QRCode.CorrectLevel.M
     });
+
+    const model = qr._oQRCode;
+    const count = model.getModuleCount();
+    const modules = [];
+    for (let row = 0; row < count; row++) {
+        const cells = [];
+        for (let col = 0; col < count; col++) {
+            cells.push(model.isDark(row, col) === true);
+        }
+        modules.push(cells);
+    }
+
+    host.innerHTML = '';
+    return { count: count, modules: modules };
+}
+
+// 1セルを印字ドットの整数個で自前に描く。
+// ライブラリ任せの拡大縮小だとセルの境界がドットの境界とずれ、
+// 白黒に落とす際に太いセルと細いセルが混ざって読み取れなくなる
+function createPrintableQRCode(text, maxSizePx) {
+    const qr = buildQRModules(text);
+    const quietCells = 4; // 読み取りに必要な静止領域
+    const totalCells = qr.count + quietCells * 2;
+
+    let cellDots = 3;
+    while (cellDots > 1 && totalCells * cellDots > maxSizePx) {
+        cellDots -= 1;
+    }
+
+    const size = totalCells * cellDots;
+    const canvas = document.createElement('canvas');
+    canvas.width = size;
+    canvas.height = size;
+
+    const ctx = canvas.getContext('2d');
+    ctx.fillStyle = '#ffffff';
+    ctx.fillRect(0, 0, size, size);
+    ctx.fillStyle = '#000000';
+    for (let row = 0; row < qr.count; row++) {
+        for (let col = 0; col < qr.count; col++) {
+            if (qr.modules[row][col]) {
+                ctx.fillRect((col + quietCells) * cellDots, (row + quietCells) * cellDots, cellDots, cellDots);
+            }
+        }
+    }
+
+    return { canvas: canvas, size: size, moduleCount: qr.count, cellDots: cellDots };
 }
 
 function drawCenteredLine(ctx, text, centerX, y) {
@@ -746,24 +758,38 @@ function applyMpb20Font(ctx, fontFamily, size, weight) {
     ctx.font = `${weight} ${size}px ${fontFamily}`;
 }
 
-// 中間調をなくして黒／白のみにする（サーマル印字は1ドット単位の白黒しか出せない）
-// しきい値を高めに取り、わずかでも文字が掛かったドットは黒に倒して掠れを防ぐ
-function binarizeCanvas(canvas, threshold) {
-    const ctx = canvas.getContext('2d');
-    const image = ctx.getImageData(0, 0, canvas.width, canvas.height);
-    const data = image.data;
-    const limit = typeof threshold === 'number' ? threshold : 185;
+// 拡大して描いた帯を印字ドットへ落とす。
+// ブラウザ任せの縮小は端末ごとに補間が違い、にじみ方が揃わずに印字ががたつくため、
+// ドット1つ分の面積をそのまま平均して黒か白かを決める
+// 濃いめに倒すと画数の多い漢字の隙間が埋まり、サーマルのにじみと合わさって潰れる。
+// ドットの半分以上が掛かったところだけ黒にする
+const MPB20_INK_THRESHOLD = 140;
 
-    for (let i = 0; i < data.length; i += 4) {
-        const luminance = data[i] * 0.299 + data[i + 1] * 0.587 + data[i + 2] * 0.114;
-        const value = luminance < limit ? 0 : 255;
-        data[i] = value;
-        data[i + 1] = value;
-        data[i + 2] = value;
-        data[i + 3] = 255;
+function reduceBandToDots(bandCtx, supersample, sourceTop, widthPx, height, outputImage, outputTop) {
+    const sourceWidth = widthPx * supersample;
+    const source = bandCtx.getImageData(0, sourceTop, sourceWidth, height * supersample).data;
+    const output = outputImage.data;
+    const samples = supersample * supersample;
+
+    for (let y = 0; y < height; y++) {
+        for (let x = 0; x < widthPx; x++) {
+            let total = 0;
+            for (let dy = 0; dy < supersample; dy++) {
+                const rowStart = (y * supersample + dy) * sourceWidth + x * supersample;
+                for (let dx = 0; dx < supersample; dx++) {
+                    const i = (rowStart + dx) * 4;
+                    total += source[i] * 0.299 + source[i + 1] * 0.587 + source[i + 2] * 0.114;
+                }
+            }
+
+            const value = (total / samples) < MPB20_INK_THRESHOLD ? 0 : 255;
+            const target = ((outputTop + y) * widthPx + x) * 4;
+            output[target] = value;
+            output[target + 1] = value;
+            output[target + 2] = value;
+            output[target + 3] = 255;
+        }
     }
-
-    ctx.putImageData(image, 0, 0);
 }
 
 // 印字幅を超える行はフォントを縮めて必ず収める
@@ -790,7 +816,9 @@ async function createMPB20LabelPdf(labelData) {
     // URL Print Agentに追加フィードを指示する手段が無いため、末尾の余白で押し出す
     const paddingBottom = 20 * pxPerMm;
     const fontFamily = '"Hiragino Sans", "Hiragino Kaku Gothic ProN", "Yu Gothic", sans-serif';
-    const qrSize = 192;
+    // 型番が長いほどQRのセル数が増えるので、大きさは1セル3ドットを保てるよう可変にする
+    const qr = createPrintableQRCode(labelData.dataURL, contentWidthPx);
+    const qrSize = qr.size;
 
     const fonts = {
         header: { size: 34, weight: 'bold', line: 42 },
@@ -811,8 +839,6 @@ async function createMPB20LabelPdf(labelData) {
     yEstimate += fonts.footer.line + qrSize + 10 + fonts.footer.line + paddingBottom;
 
     const finalHeight = Math.ceil(yEstimate);
-    const drawnQrSize = Math.min(qrSize, contentWidthPx);
-    const qrSource = await createQRCodeImage(labelData.dataURL, drawnQrSize);
 
     const drawLabel = function(ctx) {
         let y = paddingTop;
@@ -853,12 +879,11 @@ async function createMPB20LabelPdf(labelData) {
         drawFittedLine(ctx, labelData.dateString, centerX, y, contentWidthPx, fontFamily, fonts.footer.size, fonts.footer.weight);
         y += fonts.footer.line;
 
-        // QRは印字ドット数ちょうどで生成し、拡大時に補間させない
-        // （縮小後もセルの境界がドット境界と一致して潰れない）
+        // 補間するとセルの境界がドット境界からずれるため、拡大は等倍コピーで行う
         ctx.imageSmoothingEnabled = false;
-        ctx.drawImage(qrSource, Math.round(centerX - drawnQrSize / 2), Math.round(y), drawnQrSize, drawnQrSize);
+        ctx.drawImage(qr.canvas, Math.round(centerX - qrSize / 2), Math.round(y), qrSize, qrSize);
         ctx.imageSmoothingEnabled = true;
-        y += drawnQrSize + 10;
+        y += qrSize + 10;
 
         drawFittedLine(ctx, labelData.qrcodeNumber, centerX, y, contentWidthPx, fontFamily, fonts.footer.size, fonts.footer.weight);
     };
@@ -875,15 +900,12 @@ async function createMPB20LabelPdf(labelData) {
     outputCanvas.width = widthPx;
     outputCanvas.height = finalHeight;
     const outputCtx = outputCanvas.getContext('2d');
-    outputCtx.imageSmoothingEnabled = true;
-    outputCtx.imageSmoothingQuality = 'high';
-    outputCtx.fillStyle = '#ffffff';
-    outputCtx.fillRect(0, 0, outputCanvas.width, outputCanvas.height);
+    const outputImage = outputCtx.createImageData(widthPx, finalHeight);
 
     const band = document.createElement('canvas');
     band.width = widthPx * supersample;
     band.height = (bandHeight + bandMargin * 2) * supersample;
-    const bandCtx = band.getContext('2d');
+    const bandCtx = band.getContext('2d', { willReadFrequently: true });
 
     for (let top = 0; top < finalHeight; top += bandHeight) {
         const height = Math.min(bandHeight, finalHeight - top);
@@ -896,15 +918,11 @@ async function createMPB20LabelPdf(labelData) {
         bandCtx.fillStyle = '#000000';
         drawLabel(bandCtx);
 
-        outputCtx.drawImage(
-            band,
-            0, bandMargin * supersample, widthPx * supersample, height * supersample,
-            0, top, widthPx, height
-        );
+        reduceBandToDots(bandCtx, supersample, bandMargin * supersample, widthPx, height, outputImage, top);
     }
 
+    outputCtx.putImageData(outputImage, 0, 0);
     await waitForNextFrame();
-    binarizeCanvas(outputCanvas);
 
     const imgData = outputCanvas.toDataURL('image/png');
     const heightMm = widthMm * (outputCanvas.height / outputCanvas.width);

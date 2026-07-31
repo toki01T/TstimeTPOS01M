@@ -1,0 +1,10 @@
+node_modules/
+package.json
+package-lock.json
+
+# 動作確認用に作った一時ファイル
+_*.js
+_*.png
+*_screenshot.png
+*_screenshots/
+.DS_Store
