@@ -1,6 +1,13 @@
 // グローバル変数
 let printer = null;
 
+// 端末が最新版を読み込めているかメニューで確認できるようにする
+const APP_VERSION = (function() {
+    const src = document.currentScript ? document.currentScript.src : '';
+    const matched = src.match(/[?&]v=([^&]+)/);
+    return matched ? matched[1] : 'dev';
+})();
+
 // デバイス判定関数
 function isMobileDevice() {
     const ua = navigator.userAgent.toLowerCase();
@@ -233,6 +240,9 @@ document.addEventListener('DOMContentLoaded', function() {
     updatePreview();
 
     setupBottomButtonReveal();
+
+    const versionLabel = document.getElementById('appVersion');
+    if (versionLabel) versionLabel.textContent = APP_VERSION;
 });
 
 // プレビュー更新関数（プレビュー表示は削除されたが、内部処理のため残す）
@@ -769,8 +779,9 @@ async function createMPB20LabelPdf(labelData) {
     const centerX = widthPx / 2;
     const blockGapPx = 2 * pxPerMm; // 連番・カテゴリー・型番の間隔2mm
     const paddingTop = 20;
-    // 管理番号が用紙の切れ目に掛からないよう、末尾に送り分の余白を確保する
-    const paddingBottom = 7 * pxPerMm;
+    // MP-B20はサーマルヘッドから紙排出口まで距離があり、印字直後はその分が本体内に残る。
+    // URL Print Agentに追加フィードを指示する手段が無いため、末尾の余白で押し出す
+    const paddingBottom = 20 * pxPerMm;
     const fontFamily = '"Hiragino Sans", "Hiragino Kaku Gothic ProN", "Yu Gothic", sans-serif';
     const qrSize = 192;
 
@@ -881,9 +892,10 @@ async function createMPB20LabelPdf(labelData) {
         orientation: 'portrait',
         unit: 'mm',
         format: [widthMm, heightMm],
-        compress: false
+        compress: true
     });
-    pdf.addImage(imgData, 'PNG', 0, 0, widthMm, heightMm, undefined, 'FAST');
+    // URLスキームで渡すため、可逆圧縮でデータ量を抑える
+    pdf.addImage(imgData, 'PNG', 0, 0, widthMm, heightMm, undefined, 'SLOW');
     return pdf.output('datauristring').split(',')[1];
 }
 
