@@ -269,6 +269,9 @@ document.addEventListener('DOMContentLoaded', function() {
 
     setupBottomButtonReveal();
 
+    // 印刷時に待ちたくないので、起動時からBIZ UDゴシックを先読みする
+    ensurePrintFontReady();
+
     const versionLabel = document.getElementById('appVersion');
     if (versionLabel) versionLabel.textContent = APP_VERSION;
 
@@ -900,7 +903,26 @@ function drawFittedLine(ctx, text, centerX, y, maxWidth, fontFamily, size, weigh
     drawCenteredLine(ctx, text, centerX, y);
 }
 
+// BIZ UDゴシックは読みやすさ向けのUD書体。サーマルではハネやゲタが少なく潰れにくい。
+// canvas描画前に必ず読み込み完了を待つ（未読込だとフォールバックで印字が戻る）
+const MPB20_FONT_FAMILY = '"BIZ UDGothic", "Hiragino Sans", "Hiragino Kaku Gothic ProN", sans-serif';
+
+async function ensurePrintFontReady() {
+    if (!document.fonts || !document.fonts.load) return;
+    try {
+        await Promise.all([
+            document.fonts.load('700 26px "BIZ UDGothic"'),
+            document.fonts.load('400 26px "BIZ UDGothic"')
+        ]);
+        await document.fonts.ready;
+    } catch (e) {
+        console.warn('BIZ UDGothicの読み込みに失敗。代替フォントで印字します', e);
+    }
+}
+
 async function createMPB20LabelPdf(labelData) {
+    await ensurePrintFontReady();
+
     // MP-B20は203dpi（8ドット/mm）。58mm用紙の実印字幅48mmに1:1で合わせる
     const pxPerMm = 8;
     const widthMm = 48;
@@ -912,7 +934,7 @@ async function createMPB20LabelPdf(labelData) {
     // MP-B20はサーマルヘッドから紙排出口まで距離があり、印字直後はその分が本体内に残る。
     // URL Print Agentに追加フィードを指示する手段が無いため、末尾の余白で押し出す
     const paddingBottom = 18 * pxPerMm;
-    const fontFamily = '"Hiragino Sans", "Hiragino Kaku Gothic ProN", "Yu Gothic", sans-serif';
+    const fontFamily = MPB20_FONT_FAMILY;
     // 型番が長いほどQRのセル数が増えるので、大きさは1セル3ドットを保てるよう可変にする
     const qr = createPrintableQRCode(labelData.dataURL, contentWidthPx);
     const qrSize = qr.size;
