@@ -57,6 +57,8 @@
             background: #fff;
             border: 1px solid #cbd5e1;
             color: #334155;
+            font-size: 0.95rem;
+            padding: 14px;
         }
 
         .hint {
@@ -65,8 +67,37 @@
             color: #64748b;
         }
 
+        details {
+            margin-top: 16px;
+            text-align: left;
+        }
+
+        summary {
+            cursor: pointer;
+            font-size: 0.85rem;
+            font-weight: 700;
+            color: #2563eb;
+        }
+
+        details ol {
+            margin: 12px 0 0;
+            padding-left: 1.2em;
+            color: #475569;
+            font-size: 0.82rem;
+            line-height: 1.8;
+        }
+
+        code {
+            font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+            font-size: 0.78rem;
+            background: #f1f5f9;
+            padding: 1px 5px;
+            border-radius: 5px;
+            word-break: break-all;
+        }
+
         .target {
-            margin: 14px 0 0;
+            margin: 16px 0 0;
             padding-top: 12px;
             border-top: 1px solid #e2e8f0;
             color: #94a3b8;
@@ -80,9 +111,23 @@
     <div class="card">
         <h1>印刷が完了しました</h1>
         <p id="status">下のボタンでアプリに戻れます。</p>
-        <a class="button" id="retry" href="#">アプリに戻る</a>
+
+        <a class="button" id="viaShortcut" href="#">ショートカットで戻る</a>
+        <a class="button secondary" id="retry" href="#">直接アプリに戻る</a>
         <a class="button secondary" id="retryAlt" href="#">別の形式で戻る</a>
-        <p class="hint">どちらでも戻れない場合は、ホーム画面の「T's time」アイコンから開き直してください。入力内容と連番は残っています。</p>
+
+        <p class="hint">戻れない場合は、ホーム画面の「T's time」アイコンから開き直してください。入力内容と連番は残っています。</p>
+
+        <details>
+            <summary>初回だけ：ショートカットの作り方</summary>
+            <ol>
+                <li>「ショートカット」アプリを開き、右上の＋で新規作成</li>
+                <li>「アクションを追加」→「URL」を選び、下のアドレスを貼り付け<br><code id="webappUrl"></code></li>
+                <li>続けて「URLを開く」アクションを追加</li>
+                <li>右上からショートカット名を <code id="scName"></code> に設定して完了</li>
+            </ol>
+        </details>
+
         <p class="target" id="target"></p>
     </div>
 
@@ -91,29 +136,28 @@
             var params = new URLSearchParams(window.location.search);
             var target = params.get('to') || '';
             var alternate = params.get('alt') || '';
+            var shortcutName = params.get('sc') || '';
 
             var retry = document.getElementById('retry');
             var retryAlt = document.getElementById('retryAlt');
+            var viaShortcut = document.getElementById('viaShortcut');
+
             retry.href = target || '#';
             retryAlt.href = alternate || '#';
             if (!alternate || alternate === target) retryAlt.style.display = 'none';
 
-            // 開けない時に、ホーム画面へ追加したURLと一致しているか見比べられるようにする
+            // ショートカットの「URLを開く」経由なら、Safariから直接開けない端末でも
+            // webapp://を起動できる。ショートカット名で外部から呼び出す
+            if (shortcutName) {
+                viaShortcut.href = 'shortcuts://run-shortcut?name=' +
+                    encodeURIComponent(shortcutName);
+                document.getElementById('scName').textContent = shortcutName;
+            } else {
+                viaShortcut.style.display = 'none';
+            }
+
+            document.getElementById('webappUrl').textContent = target;
             document.getElementById('target').textContent = target;
-
-            if (!target) return;
-
-            // webapp:// に location で飛ぶと、iOSが対応していない場合に
-            // このページごとエラー画面へ差し替えられ、手動で戻る導線まで消えてしまう。
-            // iframe から開けば、失敗してもこのページは残る
-            var opener = document.createElement('iframe');
-            opener.style.display = 'none';
-            opener.src = target;
-            document.body.appendChild(opener);
-
-            setTimeout(function () {
-                opener.remove();
-            }, 1200);
         })();
     </script>
 </body>

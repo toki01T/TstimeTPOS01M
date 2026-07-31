@@ -532,6 +532,10 @@ function buildWebAppReturnUrls() {
     return { primary: primary, alternate: alternate };
 }
 
+// iOSショートカットの「URLを開く」なら、Safariから塞がれていてもwebapp://を起動できる。
+// そのショートカットを外部から呼ぶための名前（利用者が同じ名前で1つ作成する）
+const RETURN_SHORTCUT_NAME = 'Tstime';
+
 // 印刷アプリからの戻り先URL。
 // 印刷アプリにwebapp://を直接渡すと開けずに終わることがあるので、
 // 必ず開けるhttpsの中継ページを挟み、そこからWebアプリ本体へ渡す
@@ -543,7 +547,8 @@ function getPrintReturnUrl() {
     const directory = window.location.origin + window.location.pathname.replace(/[^/]*$/, '');
     return directory + 'return.html' +
         '?to=' + encodeURIComponent(targets.primary) +
-        '&alt=' + encodeURIComponent(targets.alternate);
+        '&alt=' + encodeURIComponent(targets.alternate) +
+        '&sc=' + encodeURIComponent(RETURN_SHORTCUT_NAME);
 }
 
 // PrintAssist印刷（iPad/iPhone）
