@@ -438,11 +438,18 @@ function isStandaloneWebApp() {
 }
 
 // 印刷アプリからの戻り先URL
-// Webアプリから起動した場合はhttpsのURLを渡すとSafariが開いてしまうため、
-// 戻り先を指定せずiOSの「前のAppに戻る」で元のWebアプリへ戻す
+// iOSはホーム画面のWebアプリを他のAppから起動できない（httpsのURLを渡すとSafariが開く）。
+// そのためWebアプリから起動した場合は戻り先を指定せず、
+// iOSの「前のAppに戻る」で元のWebアプリへ帰れる状態を保つ
 function getPrintReturnUrl() {
     if (isStandaloneWebApp()) return null;
     return window.location.href.split('#')[0];
+}
+
+// 自動で戻れないWebアプリの場合だけ、戻り方を添える
+function withReturnHint(message) {
+    if (!isStandaloneWebApp()) return message;
+    return message + ' 印刷後は画面左上の「◀ 戻る」でこのアプリに戻れます。';
 }
 
 // PrintAssist印刷（iPad/iPhone）
@@ -488,7 +495,7 @@ function printWithPrintAssist(serialNumber, modelNumber, category, operation, pu
         console.log('URLスキーム（最初の200文字）:', printURL.substring(0, 200));
         
         // デバッグ用：ユーザーに表示
-        showMessage(`印刷データを生成しました（XML: ${xml.length}文字）。PrintAssistを起動します...`, 'success');
+        showMessage(withReturnHint(`印刷データを生成しました（XML: ${xml.length}文字）。PrintAssistを起動します...`), 'success');
         
         // 少し待ってからURLスキームを開く
         setTimeout(function() {
@@ -567,7 +574,7 @@ function printWithTMAssistant(serialNumber, modelNumber, category, operation, pu
         console.log('URLスキーム（最初の200文字）:', printURL.substring(0, 200));
         
         // デバッグ用：ユーザーに表示
-        showMessage(`印刷データを生成しました（XML: ${xml.length}文字）。TM Assistantを起動します...`, 'success');
+        showMessage(withReturnHint(`印刷データを生成しました（XML: ${xml.length}文字）。TM Assistantを起動します...`), 'success');
         
         // 少し待ってからURLスキームを開く
         setTimeout(function() {
@@ -664,7 +671,7 @@ async function printWithMPB20(serialNumber, modelNumber, category, operation, pu
             document.body.appendChild(link);
             link.click();
             document.body.removeChild(link);
-            showMessage('SII URL Print Agentへ送信しました。連番を ' + newSerial + ' に更新しました。', 'success');
+            showMessage(withReturnHint('SII URL Print Agentへ送信しました。連番を ' + newSerial + ' に更新しました。'), 'success');
         }, 300);
     } catch (error) {
         console.error('=== MP-B20印刷エラー ===', error);
