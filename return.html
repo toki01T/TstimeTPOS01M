@@ -110,13 +110,13 @@
 <body>
     <div class="card">
         <h1>印刷が完了しました</h1>
-        <p id="status">下のボタンでアプリに戻れます。</p>
+        <p id="status">ショートカットを開いています…</p>
 
         <a class="button" id="viaShortcut" href="#">ショートカットで戻る</a>
         <a class="button secondary" id="retry" href="#">直接アプリに戻る</a>
         <a class="button secondary" id="retryAlt" href="#">別の形式で戻る</a>
 
-        <p class="hint">戻れない場合は、ホーム画面の「T's time」アイコンから開き直してください。入力内容と連番は残っています。</p>
+        <p class="hint">自動で戻れない場合は上のボタンを押してください。ホーム画面の「T's time」から開き直しても、入力内容と連番は残っています。</p>
 
         <details>
             <summary>初回だけ：ショートカットの作り方</summary>
@@ -134,9 +134,10 @@
     <script>
         (function () {
             var params = new URLSearchParams(window.location.search);
-            var target = params.get('to') || '';
+            var target = params.get('to') || 'webapp://toki01t.github.io/TstimeTPOS01M/';
             var alternate = params.get('alt') || '';
-            var shortcutName = params.get('sc') || '';
+            var shortcutName = params.get('sc') || 'Tstime';
+            var shortcutUrl = 'shortcuts://run-shortcut?name=' + encodeURIComponent(shortcutName);
 
             var retry = document.getElementById('retry');
             var retryAlt = document.getElementById('retryAlt');
@@ -146,18 +147,18 @@
             retryAlt.href = alternate || '#';
             if (!alternate || alternate === target) retryAlt.style.display = 'none';
 
-            // ショートカットの「URLを開く」経由なら、Safariから直接開けない端末でも
-            // webapp://を起動できる。ショートカット名で外部から呼び出す
-            if (shortcutName) {
-                viaShortcut.href = 'shortcuts://run-shortcut?name=' +
-                    encodeURIComponent(shortcutName);
-                document.getElementById('scName').textContent = shortcutName;
-            } else {
-                viaShortcut.style.display = 'none';
-            }
-
+            viaShortcut.href = shortcutUrl;
+            document.getElementById('scName').textContent = shortcutName;
             document.getElementById('webappUrl').textContent = target;
-            document.getElementById('target').textContent = target;
+            document.getElementById('target').textContent = shortcutUrl;
+
+            // 印刷完了後はボタンを待たず、すぐショートカットを開く
+            window.location.replace(shortcutUrl);
+
+            setTimeout(function () {
+                document.getElementById('status').textContent =
+                    '自動で開けませんでした。下のボタンからお戻りください。';
+            }, 1500);
         })();
     </script>
 </body>

@@ -272,15 +272,13 @@ document.addEventListener('DOMContentLoaded', function() {
     const versionLabel = document.getElementById('appVersion');
     if (versionLabel) versionLabel.textContent = APP_VERSION;
 
-    // webapp://は登録時のURLと完全一致しないと開かないため、照合する値を見せる
+    // PWAではショートカット名で戻る。照合用に表示する
     const returnLabel = document.getElementById('returnTarget');
     if (returnLabel) {
-        returnLabel.textContent = isStandaloneWebApp()
-            ? buildWebAppReturnUrls().primary
-            : getPrintReturnUrl();
+        returnLabel.textContent = getPrintReturnUrl();
     }
 
-    // 戻り方は端末やiOSのバージョンで変わるので、印刷を挟まずに試せるようにする
+    // 印刷を挟まずに、同じ戻り先（ショートカット）を試せるようにする
     const testReturnButton = document.getElementById('testReturn');
     if (testReturnButton) {
         testReturnButton.addEventListener('click', function() {
@@ -536,19 +534,16 @@ function buildWebAppReturnUrls() {
 // そのショートカットを外部から呼ぶための名前（利用者が同じ名前で1つ作成する）
 const RETURN_SHORTCUT_NAME = 'Tstime';
 
-// 印刷アプリからの戻り先URL。
-// 印刷アプリにwebapp://を直接渡すと開けずに終わることがあるので、
-// 必ず開けるhttpsの中継ページを挟み、そこからWebアプリ本体へ渡す
-function getPrintReturnUrl() {
-    const base = window.location.origin + window.location.pathname;
-    if (!isStandaloneWebApp()) return base;
+function getShortcutReturnUrl() {
+    return 'shortcuts://run-shortcut?name=' + encodeURIComponent(RETURN_SHORTCUT_NAME);
+}
 
-    const targets = buildWebAppReturnUrls();
-    const directory = window.location.origin + window.location.pathname.replace(/[^/]*$/, '');
-    return directory + 'return.html' +
-        '?to=' + encodeURIComponent(targets.primary) +
-        '&alt=' + encodeURIComponent(targets.alternate) +
-        '&sc=' + encodeURIComponent(RETURN_SHORTCUT_NAME);
+// 印刷アプリからの戻り先URL。
+// ホーム画面のWebアプリでは、印刷完了後にショートカットを自動起動して戻す。
+// （webapp://を直接渡すとiOS 26で開けないことがある）
+function getPrintReturnUrl() {
+    if (isStandaloneWebApp()) return getShortcutReturnUrl();
+    return window.location.origin + window.location.pathname;
 }
 
 // PrintAssist印刷（iPad/iPhone）
