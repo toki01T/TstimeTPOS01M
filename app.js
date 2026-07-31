@@ -202,7 +202,7 @@ document.addEventListener('DOMContentLoaded', function() {
     const modelNumberField = document.getElementById('modelNumber');
     
     // かな漢字変換の途中で値を書き換えると、確定時にIMEが変換前の内容へ戻してしまい、
-    // 17文字を超えた行がそのまま残ったり、1文字だけ別の行に取り残されたりする。
+    // 上限を超えた行がそのまま残ったり、1文字だけ別の行に取り残されたりする。
     // 変換中は折り返さず、確定した時点でまとめて折り返す
     let modelNumberComposing = false;
 
@@ -212,7 +212,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
     modelNumberField.addEventListener('compositionend', function() {
         modelNumberComposing = false;
-        autoLineBreakSmart(this, 17);
+        autoLineBreakSmart(this, MODEL_LINE_CHARS);
         autoGrowTextarea(this);
         updatePreview();
     });
@@ -224,13 +224,12 @@ document.addEventListener('DOMContentLoaded', function() {
             return;
         }
 
-        // 17文字ごとに自動改行（手動改行も考慮）
-        autoLineBreakSmart(this, 17);
+        autoLineBreakSmart(this, MODEL_LINE_CHARS);
         autoGrowTextarea(this);
         updatePreview();
     });
     
-    // Enterキーで手動改行（17文字超過時は自動改行も行う）
+    // Enterキーで手動改行（上限超過時は自動改行も行う）
     modelNumberField.addEventListener('keydown', function(e) {
         if (e.key === 'Enter') {
             // Enterキーで手動改行を許可
@@ -238,16 +237,24 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     });
     
-    // 貼り付け時に17文字で自動改行
+    // 貼り付け時にも同じ幅で自動改行
     modelNumberField.addEventListener('paste', function(e) {
         setTimeout(() => {
-            autoLineBreakForPaste(this, 17);
+            autoLineBreakForPaste(this, MODEL_LINE_CHARS);
             autoGrowTextarea(this);
             updatePreview();
         }, 10);
     });
 
+    fitTextareaToLineLength(modelNumberField, MODEL_LINE_CHARS);
     autoGrowTextarea(modelNumberField);
+
+    // 画面回転や分割表示で幅が変わったら測り直す
+    window.addEventListener('resize', function() {
+        fitTextareaToLineLength(modelNumberField, MODEL_LINE_CHARS);
+        autoGrowTextarea(modelNumberField);
+    });
+
     document.getElementById('purchasePrice').addEventListener('input', updatePreview);
     document.getElementById('batteryCost').addEventListener('input', updatePreview);
     document.getElementById('beltCost').addEventListener('input', updatePreview);
@@ -347,6 +354,32 @@ function autoGrowTextarea(textarea) {
     textarea.style.height = textarea.scrollHeight + 'px';
 }
 
+// 入力欄の幅が1行ぶんの文字数に足りないと、こちらで折り返した行の末尾がブラウザ側で
+// さらに折り返され、1文字だけ次の行に取り残されて見える。
+// 端末幅は機種によって変わるので、実際の文字幅を測って足りない分だけ字間を詰める。
+// 表示だけの調整で、入力値や印字内容は変えない
+function fitTextareaToLineLength(textarea, charsPerLine) {
+    if (!textarea) return;
+
+    textarea.style.letterSpacing = '';
+    const style = window.getComputedStyle(textarea);
+    const inner = textarea.clientWidth -
+        parseFloat(style.paddingLeft) - parseFloat(style.paddingRight);
+    if (!(inner > 0)) return;
+
+    const context = fitTextareaToLineLength.context ||
+        (fitTextareaToLineLength.context = document.createElement('canvas').getContext('2d'));
+    context.font = `${style.fontStyle} ${style.fontWeight} ${style.fontSize} ${style.fontFamily}`;
+
+    // 全角が最も広いので、全角が収まれば半角も収まる
+    const lineWidth = context.measureText('あ'.repeat(charsPerLine)).width;
+    const surplus = inner - lineWidth - 1; // 端数で溢れないよう1px余裕を見る
+    if (surplus >= 0) return;
+
+    const spacing = Math.max(surplus / charsPerLine, -1);
+    textarea.style.letterSpacing = spacing.toFixed(2) + 'px';
+}
+
 function setupBottomButtonReveal() {
     const buttonSection = document.getElementById('buttonSection');
     if (!buttonSection) return;
@@ -384,7 +417,7 @@ function buildLabelPrintData(serialNumber, modelNumber, category, operation, pur
     const normalizedModelNumber = toFullWidth(modelNumber);
     const modelLines = normalizedModelNumber.includes('\n')
         ? normalizedModelNumber.split('\n')
-        : splitText(normalizedModelNumber, 17);
+        : splitText(normalizedModelNumber, MODEL_LINE_CHARS);
 
     const operationLines = operation ? splitOperationText(toFullWidth(operation)) : [];
 
@@ -1013,7 +1046,7 @@ function escapeXml(str) {
               .replace(/'/g, '&apos;');
 }
 
-// テキストを指定文字数で分割（17文字で改行）
+// テキストを指定文字数で分割
 function splitText(text, maxLength) {
     if (!text) return [''];
     const lines = [];
@@ -1025,6 +1058,10 @@ function splitText(text, maxLength) {
 
 // 半角を1、全角を2として行の幅を数える（58mm用紙は1行あたり半角32文字）
 const PRINT_LINE_UNITS = 32;
+
+// 型番の自動改行は全角16文字。58mm用紙に収まる幅がそのまま上限になる
+// （以前は17文字で折り返していたため、印字幅を全角1文字ぶん超えていた）
+const MODEL_LINE_CHARS = PRINT_LINE_UNITS / 2;
 
 function textWidthUnits(text) {
     let units = 0;
@@ -1051,15 +1088,14 @@ function splitOperationText(text) {
         }
     }
 
-    return splitText(text, 17);
+    return splitText(text, MODEL_LINE_CHARS);
 }
 
-// テキストエリアの自動改行処理（17文字ごと）
+// テキストエリアの自動改行処理
 function autoLineBreak(textarea, maxCharsPerLine) {
     const cursorPos = textarea.selectionStart;
     let text = textarea.value.replace(/\n/g, ''); // 既存の改行を削除
-    
-    // 17文字ごとに改行を挿入
+
     let formatted = '';
     for (let i = 0; i < text.length; i += maxCharsPerLine) {
         if (i > 0) formatted += '\n';
@@ -1073,14 +1109,13 @@ function autoLineBreak(textarea, maxCharsPerLine) {
     textarea.setSelectionRange(newCursorPos, newCursorPos);
 }
 
-// 貼り付け時の自動改行処理（手動改行を保持しながら17文字超過行を分割）
+// 貼り付け時の自動改行処理（手動改行を保持しながら超過行を分割）
 function autoLineBreakForPaste(textarea, maxCharsPerLine) {
     const lines = textarea.value.split('\n');
     let formatted = [];
     
     for (let line of lines) {
         if (line.length > maxCharsPerLine) {
-            // 17文字を超える行は分割
             for (let i = 0; i < line.length; i += maxCharsPerLine) {
                 formatted.push(line.substring(i, i + maxCharsPerLine));
             }
@@ -1092,7 +1127,7 @@ function autoLineBreakForPaste(textarea, maxCharsPerLine) {
     textarea.value = formatted.join('\n');
 }
 
-// 手動改行を残したまま17文字で折り返し、カーソルの移動先も同時に求める。
+// 手動改行を残したまま指定文字数で折り返し、カーソルの移動先も同時に求める。
 // 折り返しの前後で文字の並びは変わらないので、元の文字を1つずつ書き写しながら
 // カーソルが何文字目にあったかを追いかければ、挿入した改行の分だけ正確にずれる
 function wrapWithCursor(value, maxCharsPerLine, cursorPos) {
@@ -1120,7 +1155,7 @@ function wrapWithCursor(value, maxCharsPerLine, cursorPos) {
     return { value: out, cursor: cursor === null ? out.length : cursor };
 }
 
-// スマートな自動改行（手動改行を保持しつつ、17文字超過を自動分割）
+// スマートな自動改行（手動改行を保持しつつ、超過分を自動分割）
 function autoLineBreakSmart(textarea, maxCharsPerLine) {
     const wrapped = wrapWithCursor(textarea.value, maxCharsPerLine, textarea.selectionStart);
     if (wrapped.value === textarea.value) return;

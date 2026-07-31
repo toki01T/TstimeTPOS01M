@@ -854,6 +854,12 @@ body {
         padding: 16px;
     }
 
+    /* 型番は1行=全角16文字。狭い画面でも折り返さないよう左右の余白を詰める */
+    .form-group textarea {
+        padding-left: 12px;
+        padding-right: 12px;
+    }
+
     .section-heading {
         margin-bottom: 16px;
     }

@@ -58,20 +58,20 @@
             color: #334155;
         }
 
-        #fallback {
-            display: none;
+        .hint {
+            margin-bottom: 0;
+            font-size: 0.82rem;
+            color: #64748b;
         }
     </style>
 </head>
 <body>
     <div class="card">
         <h1>印刷が完了しました</h1>
-        <p id="status">アプリに戻っています…</p>
-        <div id="fallback">
-            <a class="button" id="retry" href="#">アプリに戻る</a>
-            <a class="button secondary" id="retryAlt" href="#">別の形式で戻る</a>
-            <p>どちらでも戻れない場合は、ホーム画面の「T's time」アイコンから開き直してください。入力内容と連番は残っています。</p>
-        </div>
+        <p id="status">下のボタンでアプリに戻れます。</p>
+        <a class="button" id="retry" href="#">アプリに戻る</a>
+        <a class="button secondary" id="retryAlt" href="#">別の形式で戻る</a>
+        <p class="hint">戻れない場合はホーム画面の「T's time」アイコンから開き直してください。入力内容と連番は残っています。</p>
     </div>
 
     <script>
@@ -82,20 +82,23 @@
 
             var retry = document.getElementById('retry');
             var retryAlt = document.getElementById('retryAlt');
-            retry.href = target;
-            retryAlt.href = alternate;
+            retry.href = target || '#';
+            retryAlt.href = alternate || '#';
             if (!alternate || alternate === target) retryAlt.style.display = 'none';
 
-            if (target) {
-                window.location.replace(target);
-            }
+            if (!target) return;
 
-            // 開けなかった場合はこのページに留まるので、手で戻れる導線を出す
+            // webapp:// に location で飛ぶと、iOSが対応していない場合に
+            // このページごとエラー画面へ差し替えられ、手動で戻る導線まで消えてしまう。
+            // iframe から開けば、失敗してもこのページは残る
+            var opener = document.createElement('iframe');
+            opener.style.display = 'none';
+            opener.src = target;
+            document.body.appendChild(opener);
+
             setTimeout(function () {
-                document.getElementById('status').textContent =
-                    'アプリに自動で戻れませんでした。下のボタンからお戻りください。';
-                document.getElementById('fallback').style.display = 'block';
-            }, 1500);
+                opener.remove();
+            }, 1200);
         })();
     </script>
 </body>
