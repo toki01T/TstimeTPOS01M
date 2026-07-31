@@ -243,6 +243,10 @@ document.addEventListener('DOMContentLoaded', function() {
 
     const versionLabel = document.getElementById('appVersion');
     if (versionLabel) versionLabel.textContent = APP_VERSION;
+
+    // webapp://は登録時のURLと完全一致しないと開かないため、実際に使う値を見せる
+    const returnLabel = document.getElementById('returnTarget');
+    if (returnLabel) returnLabel.textContent = getPrintReturnUrl() || '(なし)';
 });
 
 // プレビュー更新関数（プレビュー表示は削除されたが、内部処理のため残す）
@@ -447,19 +451,18 @@ function isStandaloneWebApp() {
            (window.matchMedia && window.matchMedia('(display-mode: standalone)').matches);
 }
 
-// 印刷アプリからの戻り先URL
-// iOSはホーム画面のWebアプリを他のAppから起動できない（httpsのURLを渡すとSafariが開く）。
-// そのためWebアプリから起動した場合は戻り先を指定せず、
-// iOSの「前のAppに戻る」で元のWebアプリへ帰れる状態を保つ
-function getPrintReturnUrl() {
-    if (isStandaloneWebApp()) return null;
-    return window.location.href.split('#')[0];
+// 印刷アプリからの戻り先URL。
+// ホーム画面のWebアプリはhttpsのURLでは開けず、渡してもSafariが別に開いてしまう。
+// webapp://スキームだけがインストール済みのWebアプリ本体を起動できる。
+// 追加した時のURLと1文字でも違うと開けないため、
+// 起動中のWebアプリ自身のURLからそのまま組み立てる
+function buildWebAppReturnUrl() {
+    return 'webapp://' + window.location.host + window.location.pathname;
 }
 
-// 自動で戻れないWebアプリの場合だけ、戻り方を添える
-function withReturnHint(message) {
-    if (!isStandaloneWebApp()) return message;
-    return message + ' 印刷後は画面左上の「◀ 戻る」でこのアプリに戻れます。';
+function getPrintReturnUrl() {
+    if (isStandaloneWebApp()) return buildWebAppReturnUrl();
+    return window.location.href.split('#')[0];
 }
 
 // PrintAssist印刷（iPad/iPhone）
@@ -505,7 +508,7 @@ function printWithPrintAssist(serialNumber, modelNumber, category, operation, pu
         console.log('URLスキーム（最初の200文字）:', printURL.substring(0, 200));
         
         // デバッグ用：ユーザーに表示
-        showMessage(withReturnHint(`印刷データを生成しました（XML: ${xml.length}文字）。PrintAssistを起動します...`), 'success');
+        showMessage(`印刷データを生成しました（XML: ${xml.length}文字）。PrintAssistを起動します...`, 'success');
         
         // 少し待ってからURLスキームを開く
         setTimeout(function() {
@@ -584,7 +587,7 @@ function printWithTMAssistant(serialNumber, modelNumber, category, operation, pu
         console.log('URLスキーム（最初の200文字）:', printURL.substring(0, 200));
         
         // デバッグ用：ユーザーに表示
-        showMessage(withReturnHint(`印刷データを生成しました（XML: ${xml.length}文字）。TM Assistantを起動します...`), 'success');
+        showMessage(`印刷データを生成しました（XML: ${xml.length}文字）。TM Assistantを起動します...`, 'success');
         
         // 少し待ってからURLスキームを開く
         setTimeout(function() {
@@ -684,7 +687,7 @@ async function printWithMPB20(serialNumber, modelNumber, category, operation, pu
             document.body.appendChild(link);
             link.click();
             document.body.removeChild(link);
-            showMessage(withReturnHint('SII URL Print Agentへ送信しました。連番を ' + newSerial + ' に更新しました。'), 'success');
+            showMessage('SII URL Print Agentへ送信しました。連番を ' + newSerial + ' に更新しました。', 'success');
         }, 300);
     } catch (error) {
         console.error('=== MP-B20印刷エラー ===', error);
