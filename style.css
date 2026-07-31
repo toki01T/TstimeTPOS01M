@@ -495,10 +495,13 @@ body {
     top: 0;
     right: -360px;
     width: 360px;
+    /* 100vhはiOSだとツールバーに隠れる分まで含み、末尾の項目が画面外に残る */
     height: 100vh;
+    height: 100dvh;
     z-index: 1002;
     transition: right 0.28s ease;
-    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
     box-shadow: -18px 0 40px rgba(15, 23, 42, 0.18);
 }
 
@@ -507,6 +510,7 @@ body {
 }
 
 .side-menu-header {
+    flex: none;
     display: flex;
     justify-content: space-between;
     align-items: center;
@@ -532,12 +536,18 @@ body {
 }
 
 .side-menu-content {
+    flex: 1;
+    min-height: 0;
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+    overscroll-behavior: contain;
     padding: 22px;
+    padding-bottom: calc(22px + env(safe-area-inset-bottom));
 }
 
 .menu-item {
-    margin-bottom: 18px;
-    padding: 16px;
+    margin-bottom: 14px;
+    padding: 14px;
     border: 1px solid var(--border);
     border-radius: 16px;
     background: rgba(248, 250, 255, 0.95);
@@ -599,7 +609,7 @@ body {
 
 .menu-divider {
     height: 1px;
-    margin: 18px 0;
+    margin: 14px 0;
     background: linear-gradient(90deg, transparent, rgba(15, 23, 42, 0.12), transparent);
 }
 
@@ -878,7 +888,6 @@ body {
         width: min(100vw, 340px);
         /* For iPhone, avoid calc-based hiding; use right:-100% to fully hide. */
         right: -100%;
-        padding-bottom: env(safe-area-inset-bottom);
     }
 
     .side-menu.active {
