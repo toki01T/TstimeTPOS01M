@@ -803,71 +803,67 @@ async function createMPB20LabelPdf(labelData) {
     if (labelData.printNotice) yEstimate += labelData.noticeLines.length * fonts.notice.line + 14;
     yEstimate += fonts.footer.line + qrSize + 10 + fonts.footer.line + paddingBottom;
 
-    // 印字ドットと等倍で文字を描くと画線が1ドット未満になって掠れるため、
-    // いったら拡大して描き、最後に等倍へ縮小してからドットを判定する
-    const supersample = 3;
-    const canvas = document.createElement('canvas');
-    canvas.width = widthPx * supersample;
-    canvas.height = Math.ceil(yEstimate) * supersample;
-    const ctx = canvas.getContext('2d');
-    ctx.scale(supersample, supersample);
-    ctx.fillStyle = '#ffffff';
-    ctx.fillRect(0, 0, widthPx, Math.ceil(yEstimate));
-    ctx.fillStyle = '#000000';
-
-    let y = paddingTop;
-
-    drawFittedLine(ctx, labelData.headerLine, centerX, y, contentWidthPx, fontFamily, fonts.header.size, fonts.header.weight);
-    y += fonts.header.line + blockGapPx;
-
-    if (labelData.category) {
-        drawFittedLine(ctx, labelData.category, centerX, y, contentWidthPx, fontFamily, fonts.body.size, fonts.body.weight);
-        y += fonts.body.line + blockGapPx;
-    }
-
-    labelData.modelLines.forEach(function(line) {
-        drawFittedLine(ctx, line, centerX, y, contentWidthPx, fontFamily, fonts.body.size, fonts.body.weight);
-        y += fonts.body.line;
-    });
-    y += 14;
-
-    labelData.priceLines.forEach(function(line) {
-        drawFittedLine(ctx, line, centerX, y, contentWidthPx, fontFamily, fonts.price.size, fonts.price.weight);
-        y += fonts.price.line;
-    });
-    if (labelData.priceLines.length) {
-        y += 14;
-    }
-
-    drawFittedLine(ctx, labelData.desiredLine, centerX, y, contentWidthPx, fontFamily, fonts.desired.size, fonts.desired.weight);
-    y += fonts.desired.line;
-
-    if (labelData.printNotice) {
-        labelData.noticeLines.forEach(function(line) {
-            drawFittedLine(ctx, line, centerX, y, contentWidthPx, fontFamily, fonts.notice.size, fonts.notice.weight);
-            y += fonts.notice.line;
-        });
-        y += 14;
-    }
-
-    drawFittedLine(ctx, labelData.dateString, centerX, y, contentWidthPx, fontFamily, fonts.footer.size, fonts.footer.weight);
-    y += fonts.footer.line;
-
-    // QRは印字ドット数ちょうどで生成し、拡大時に補間させない
-    // （縮小後もセルの境界がドット境界と一致して潰れない）
+    const finalHeight = Math.ceil(yEstimate);
     const drawnQrSize = Math.min(qrSize, contentWidthPx);
     const qrSource = await createQRCodeImage(labelData.dataURL, drawnQrSize);
-    const qrX = Math.round(centerX - drawnQrSize / 2);
-    ctx.imageSmoothingEnabled = false;
-    ctx.drawImage(qrSource, qrX, Math.round(y), drawnQrSize, drawnQrSize);
-    ctx.imageSmoothingEnabled = true;
-    y += drawnQrSize + 10;
 
-    drawFittedLine(ctx, labelData.qrcodeNumber, centerX, y, contentWidthPx, fontFamily, fonts.footer.size, fonts.footer.weight);
-    y += fonts.footer.line;
+    const drawLabel = function(ctx) {
+        let y = paddingTop;
 
-    // 実際の印字ドット数（48mm × 8ドット/mm）へ縮小する
-    const finalHeight = Math.ceil(y + paddingBottom);
+        drawFittedLine(ctx, labelData.headerLine, centerX, y, contentWidthPx, fontFamily, fonts.header.size, fonts.header.weight);
+        y += fonts.header.line + blockGapPx;
+
+        if (labelData.category) {
+            drawFittedLine(ctx, labelData.category, centerX, y, contentWidthPx, fontFamily, fonts.body.size, fonts.body.weight);
+            y += fonts.body.line + blockGapPx;
+        }
+
+        labelData.modelLines.forEach(function(line) {
+            drawFittedLine(ctx, line, centerX, y, contentWidthPx, fontFamily, fonts.body.size, fonts.body.weight);
+            y += fonts.body.line;
+        });
+        y += 14;
+
+        labelData.priceLines.forEach(function(line) {
+            drawFittedLine(ctx, line, centerX, y, contentWidthPx, fontFamily, fonts.price.size, fonts.price.weight);
+            y += fonts.price.line;
+        });
+        if (labelData.priceLines.length) {
+            y += 14;
+        }
+
+        drawFittedLine(ctx, labelData.desiredLine, centerX, y, contentWidthPx, fontFamily, fonts.desired.size, fonts.desired.weight);
+        y += fonts.desired.line;
+
+        if (labelData.printNotice) {
+            labelData.noticeLines.forEach(function(line) {
+                drawFittedLine(ctx, line, centerX, y, contentWidthPx, fontFamily, fonts.notice.size, fonts.notice.weight);
+                y += fonts.notice.line;
+            });
+            y += 14;
+        }
+
+        drawFittedLine(ctx, labelData.dateString, centerX, y, contentWidthPx, fontFamily, fonts.footer.size, fonts.footer.weight);
+        y += fonts.footer.line;
+
+        // QRは印字ドット数ちょうどで生成し、拡大時に補間させない
+        // （縮小後もセルの境界がドット境界と一致して潰れない）
+        ctx.imageSmoothingEnabled = false;
+        ctx.drawImage(qrSource, Math.round(centerX - drawnQrSize / 2), Math.round(y), drawnQrSize, drawnQrSize);
+        ctx.imageSmoothingEnabled = true;
+        y += drawnQrSize + 10;
+
+        drawFittedLine(ctx, labelData.qrcodeNumber, centerX, y, contentWidthPx, fontFamily, fonts.footer.size, fonts.footer.weight);
+    };
+
+    // 印字ドットと等倍で文字を描くと画線が1ドット未満になって掠れるため、
+    // 拡大して描いてから等倍へ縮小し、そのうえでドットを判定する。
+    // 型番が長いと拡大後の高さが端末のキャンバス上限を超えて下部が欠けるので、
+    // 横帯に区切って描き、帯ごとに縮小して貼り合わせる
+    const supersample = 3;
+    const bandHeight = 400;
+    const bandMargin = 16;
+
     const outputCanvas = document.createElement('canvas');
     outputCanvas.width = widthPx;
     outputCanvas.height = finalHeight;
@@ -876,11 +872,29 @@ async function createMPB20LabelPdf(labelData) {
     outputCtx.imageSmoothingQuality = 'high';
     outputCtx.fillStyle = '#ffffff';
     outputCtx.fillRect(0, 0, outputCanvas.width, outputCanvas.height);
-    outputCtx.drawImage(
-        canvas,
-        0, 0, widthPx * supersample, finalHeight * supersample,
-        0, 0, widthPx, finalHeight
-    );
+
+    const band = document.createElement('canvas');
+    band.width = widthPx * supersample;
+    band.height = (bandHeight + bandMargin * 2) * supersample;
+    const bandCtx = band.getContext('2d');
+
+    for (let top = 0; top < finalHeight; top += bandHeight) {
+        const height = Math.min(bandHeight, finalHeight - top);
+
+        bandCtx.setTransform(1, 0, 0, 1, 0, 0);
+        bandCtx.fillStyle = '#ffffff';
+        bandCtx.fillRect(0, 0, band.width, band.height);
+        // 帯の境目で文字が欠けないよう、上下に余白分を含めて描いてから切り出す
+        bandCtx.setTransform(supersample, 0, 0, supersample, 0, -(top - bandMargin) * supersample);
+        bandCtx.fillStyle = '#000000';
+        drawLabel(bandCtx);
+
+        outputCtx.drawImage(
+            band,
+            0, bandMargin * supersample, widthPx * supersample, height * supersample,
+            0, top, widthPx, height
+        );
+    }
 
     await waitForNextFrame();
     binarizeCanvas(outputCanvas);
@@ -956,16 +970,32 @@ function autoLineBreakForPaste(textarea, maxCharsPerLine) {
     textarea.value = formatted.join('\n');
 }
 
+// 改行を挿入した後のカーソル位置を求める
+// 挿入前と同じ文字数だけ進んだ位置まで送り、途中で挿入された改行は読み飛ばす
+function shiftCursorPastInsertedBreaks(oldValue, newValue, cursorPos) {
+    let oldIndex = 0;
+    let newIndex = 0;
+
+    while (oldIndex < cursorPos && newIndex < newValue.length) {
+        if (oldValue[oldIndex] === newValue[newIndex]) {
+            oldIndex++;
+        }
+        newIndex++;
+    }
+
+    return newIndex;
+}
+
 // スマートな自動改行（手動改行を保持しつつ、17文字超過を自動分割）
 function autoLineBreakSmart(textarea, maxCharsPerLine) {
     const cursorPos = textarea.selectionStart;
-    const lines = textarea.value.split('\n');
+    const oldValue = textarea.value;
+    const lines = oldValue.split('\n');
     let formatted = [];
-    let totalChars = 0;
-    
+
     for (let i = 0; i < lines.length; i++) {
         const line = lines[i];
-        
+
         if (line.length > maxCharsPerLine) {
             // 17文字を超える行は自動分割
             for (let j = 0; j < line.length; j += maxCharsPerLine) {
@@ -975,12 +1005,11 @@ function autoLineBreakSmart(textarea, maxCharsPerLine) {
             formatted.push(line);
         }
     }
-    
+
     const newValue = formatted.join('\n');
-    if (textarea.value !== newValue) {
+    if (oldValue !== newValue) {
         textarea.value = newValue;
-        // カーソル位置を調整
-        const newCursorPos = Math.min(cursorPos, newValue.length);
+        const newCursorPos = shiftCursorPastInsertedBreaks(oldValue, newValue, cursorPos);
         textarea.setSelectionRange(newCursorPos, newCursorPos);
     }
 }
