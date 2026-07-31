@@ -658,6 +658,9 @@ async function printWithMPB20(serialNumber, modelNumber, category, operation, pu
             'BtKeepConnect=always&' +
             'Format=pdf&' +
             'Data=' + encodeURIComponent(pdfBase64) + '&' +
+            // 既定の15秒ではBluetooth転送と印字が終わらず、値札の途中で打ち切られる。
+            // 指定できる最大値まで延ばす
+            'Timeout=300000&' +
             'ErrorDialog=yes&' +
             'SelectOnError=yes&' +
             'PaperWidth=58&' +
@@ -824,7 +827,7 @@ async function createMPB20LabelPdf(labelData) {
     const paddingTop = 20;
     // MP-B20はサーマルヘッドから紙排出口まで距離があり、印字直後はその分が本体内に残る。
     // URL Print Agentに追加フィードを指示する手段が無いため、末尾の余白で押し出す
-    const paddingBottom = 20 * pxPerMm;
+    const paddingBottom = 18 * pxPerMm;
     const fontFamily = '"Hiragino Sans", "Hiragino Kaku Gothic ProN", "Yu Gothic", sans-serif';
     // 型番が長いほどQRのセル数が増えるので、大きさは1セル3ドットを保てるよう可変にする
     const qr = createPrintableQRCode(labelData.dataURL, contentWidthPx);
