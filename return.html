@@ -44,10 +44,11 @@
         a.button {
             display: block;
             margin-bottom: 10px;
-            padding: 15px;
+            padding: 18px;
             border-radius: 14px;
             background: linear-gradient(135deg, #2563eb, #1d4ed8);
             color: #fff;
+            font-size: 1.05rem;
             font-weight: 700;
             text-decoration: none;
         }
@@ -63,6 +64,16 @@
             font-size: 0.82rem;
             color: #64748b;
         }
+
+        .target {
+            margin: 14px 0 0;
+            padding-top: 12px;
+            border-top: 1px solid #e2e8f0;
+            color: #94a3b8;
+            font-size: 0.7rem;
+            font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+            word-break: break-all;
+        }
     </style>
 </head>
 <body>
@@ -71,7 +82,8 @@
         <p id="status">下のボタンでアプリに戻れます。</p>
         <a class="button" id="retry" href="#">アプリに戻る</a>
         <a class="button secondary" id="retryAlt" href="#">別の形式で戻る</a>
-        <p class="hint">戻れない場合はホーム画面の「T's time」アイコンから開き直してください。入力内容と連番は残っています。</p>
+        <p class="hint">どちらでも戻れない場合は、ホーム画面の「T's time」アイコンから開き直してください。入力内容と連番は残っています。</p>
+        <p class="target" id="target"></p>
     </div>
 
     <script>
@@ -85,6 +97,9 @@
             retry.href = target || '#';
             retryAlt.href = alternate || '#';
             if (!alternate || alternate === target) retryAlt.style.display = 'none';
+
+            // 開けない時に、ホーム画面へ追加したURLと一致しているか見比べられるようにする
+            document.getElementById('target').textContent = target;
 
             if (!target) return;
 

@@ -279,6 +279,14 @@ document.addEventListener('DOMContentLoaded', function() {
             ? buildWebAppReturnUrls().primary
             : getPrintReturnUrl();
     }
+
+    // 戻り方は端末やiOSのバージョンで変わるので、印刷を挟まずに試せるようにする
+    const testReturnButton = document.getElementById('testReturn');
+    if (testReturnButton) {
+        testReturnButton.addEventListener('click', function() {
+            window.location.href = getPrintReturnUrl();
+        });
+    }
 });
 
 // プレビュー更新関数（プレビュー表示は削除されたが、内部処理のため残す）
