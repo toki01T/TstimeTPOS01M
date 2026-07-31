@@ -749,6 +749,8 @@ async function createMPB20LabelPdf(labelData) {
     const centerX = widthPx / 2;
     const blockGapPx = 2 * pxPerMm; // 連番・カテゴリー・型番の間隔2mm
     const paddingTop = 20;
+    // 管理番号が用紙の切れ目に掛からないよう、末尾に送り分の余白を確保する
+    const paddingBottom = 7 * pxPerMm;
     const fontFamily = '"Hiragino Sans", "Hiragino Kaku Gothic ProN", "Yu Gothic", sans-serif';
     const qrSize = 192;
 
@@ -768,7 +770,7 @@ async function createMPB20LabelPdf(labelData) {
     if (labelData.priceLines.length) yEstimate += 14;
     yEstimate += fonts.desired.line;
     if (labelData.printNotice) yEstimate += labelData.noticeLines.length * fonts.notice.line + 14;
-    yEstimate += fonts.footer.line + qrSize + fonts.footer.line + 24;
+    yEstimate += fonts.footer.line + qrSize + 10 + fonts.footer.line + paddingBottom;
 
     const canvas = document.createElement('canvas');
     canvas.width = widthPx;
@@ -827,7 +829,7 @@ async function createMPB20LabelPdf(labelData) {
     drawFittedLine(ctx, labelData.qrcodeNumber, centerX, y, contentWidthPx, fontFamily, fonts.footer.size, fonts.footer.weight);
     y += fonts.footer.line;
 
-    const finalHeight = Math.ceil(y + 20);
+    const finalHeight = Math.ceil(y + paddingBottom);
     let outputCanvas = canvas;
     if (canvas.height !== finalHeight) {
         const trimmed = document.createElement('canvas');
