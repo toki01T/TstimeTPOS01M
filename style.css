@@ -409,12 +409,6 @@ body {
     transform: translateX(26px);
 }
 
-.scroll-end-marker {
-    height: 1px;
-    width: 100%;
-    pointer-events: none;
-}
-
 .button-section {
     display: flex;
     gap: 14px;
@@ -847,18 +841,12 @@ body {
         font-size: 1.25rem;
     }
 
-    main {
-        min-height: calc(100dvh + 80px);
-    }
-
-    .scroll-spacer {
-        min-height: 32vh;
-    }
-
     .button-section {
         flex-direction: column;
         z-index: 20;
-        padding-top: 4px;
+        /* 入力カード直下に配置するため main のグリッド間隔を打ち消す */
+        margin-top: -16px;
+        padding-top: 0;
         padding-bottom: env(safe-area-inset-bottom);
         opacity: 0;
         visibility: hidden;

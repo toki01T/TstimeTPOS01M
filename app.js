@@ -198,6 +198,7 @@ document.addEventListener('DOMContentLoaded', function() {
     modelNumberField.addEventListener('input', function(e) {
         // 17文字ごとに自動改行（手動改行も考慮）
         autoLineBreakSmart(this, 17);
+        autoGrowTextarea(this);
         updatePreview();
     });
     
@@ -213,9 +214,12 @@ document.addEventListener('DOMContentLoaded', function() {
     modelNumberField.addEventListener('paste', function(e) {
         setTimeout(() => {
             autoLineBreakForPaste(this, 17);
+            autoGrowTextarea(this);
             updatePreview();
         }, 10);
     });
+
+    autoGrowTextarea(modelNumberField);
     document.getElementById('purchasePrice').addEventListener('input', updatePreview);
     document.getElementById('batteryCost').addEventListener('input', updatePreview);
     document.getElementById('beltCost').addEventListener('input', updatePreview);
@@ -297,10 +301,16 @@ function printLabel() {
     }
 }
 
+// 入力量に応じて型番欄の高さを広げる（文字数制限なし）
+function autoGrowTextarea(textarea) {
+    if (!textarea) return;
+    textarea.style.height = 'auto';
+    textarea.style.height = textarea.scrollHeight + 'px';
+}
+
 function setupBottomButtonReveal() {
     const buttonSection = document.getElementById('buttonSection');
-    const marker = document.getElementById('scrollEndMarker');
-    if (!buttonSection || !marker) return;
+    if (!buttonSection) return;
 
     const mobileQuery = window.matchMedia('(max-width: 768px)');
 
@@ -316,9 +326,9 @@ function setupBottomButtonReveal() {
         entries.forEach(function(entry) {
             applyVisibility(entry.isIntersecting);
         });
-    }, { root: null, threshold: 0, rootMargin: '0px 0px -8px 0px' });
+    }, { root: null, threshold: 0.6, rootMargin: '0px 0px -8px 0px' });
 
-    observer.observe(marker);
+    observer.observe(buttonSection);
 
     mobileQuery.addEventListener('change', function() {
         if (!mobileQuery.matches) {
@@ -343,7 +353,7 @@ function buildLabelPrintData(serialNumber, modelNumber, category, operation, pur
     if (beltCost) priceLines.push(buildPriceLine('ベルト代', beltCost));
 
     return {
-        headerLine: `T's time   ${formatSerialDigits5FullWidth(serialNumber)}`,
+        headerLine: `T❜s time   ${formatSerialDigits5FullWidth(serialNumber)}`,
         category: category || '',
         modelLines: modelLines,
         priceLines: priceLines,
@@ -1187,6 +1197,7 @@ function executePrint(eposDevice, serialNumber, modelNumber, purchasePrice, batt
 // フォームクリア関数
 function clearForm() {
     document.getElementById('modelNumber').value = '';
+    autoGrowTextarea(document.getElementById('modelNumber'));
     document.getElementById('categoryType').selectedIndex = 0;
     document.getElementById('otherCategory').value = '';
     document.getElementById('otherCategoryGroup').style.display = 'none';
