@@ -421,6 +421,20 @@ function buildEposPrintXml(labelData) {
     return xml;
 }
 
+// ホーム画面から起動したWebアプリ（スタンドアロン）かどうか
+function isStandaloneWebApp() {
+    return window.navigator.standalone === true ||
+           (window.matchMedia && window.matchMedia('(display-mode: standalone)').matches);
+}
+
+// 印刷アプリからの戻り先URL
+// Webアプリから起動した場合はhttpsのURLを渡すとSafariが開いてしまうため、
+// 戻り先を指定せずiOSの「前のAppに戻る」で元のWebアプリへ戻す
+function getPrintReturnUrl() {
+    if (isStandaloneWebApp()) return null;
+    return window.location.href.split('#')[0];
+}
+
 // PrintAssist印刷（iPad/iPhone）
 function printWithPrintAssist(serialNumber, modelNumber, category, operation, purchasePrice, batteryCost, beltCost, desiredPrice) {
     console.log('=== PrintAssist印刷開始 ===');
@@ -457,8 +471,9 @@ function printWithPrintAssist(serialNumber, modelNumber, category, operation, pu
         
         // URLスキーム生成（PrintAssist公式フォーマット）
         // tmprintassistant:// 形式を使用
-        const success = encodeURIComponent(window.location.href);
-        const printURL = `tmprintassistant://tmprintassistant.epson.com/print?success=${success}&ver=1&data-type=eposprintxml&reselect=yes&data=${encodedXML}`;
+        const returnUrl = getPrintReturnUrl();
+        const successParam = returnUrl ? `success=${encodeURIComponent(returnUrl)}&` : '';
+        const printURL = `tmprintassistant://tmprintassistant.epson.com/print?${successParam}ver=1&data-type=eposprintxml&reselect=yes&data=${encodedXML}`;
         console.log('完全なURLスキーム長:', printURL.length);
         console.log('URLスキーム（最初の200文字）:', printURL.substring(0, 200));
         
@@ -605,11 +620,14 @@ async function printWithMPB20(serialNumber, modelNumber, category, operation, pu
         const labelData = buildLabelPrintData(serialNumber, modelNumber, category, operation, purchasePrice, batteryCost, beltCost, desiredPrice);
         const pdfBase64 = await createMPB20LabelPdf(labelData);
 
-        const callbackPage = window.location.href.split('#')[0].split('?')[0];
+        const returnUrl = getPrintReturnUrl();
+        const callbackParams = returnUrl
+            ? 'CallbackSuccess=' + encodeURIComponent(returnUrl) + '&' +
+              'CallbackFail=' + encodeURIComponent(returnUrl) + '&'
+            : '';
         const printURL =
             'siiprintagent://1.0/print?' +
-            'CallbackSuccess=' + encodeURIComponent(callbackPage) + '&' +
-            'CallbackFail=' + encodeURIComponent(callbackPage) + '&' +
+            callbackParams +
             'BtKeepConnect=always&' +
             'Format=pdf&' +
             'Data=' + encodeURIComponent(pdfBase64) + '&' +
@@ -711,15 +729,17 @@ function applyMpb20Font(ctx, fontFamily, size, weight) {
     ctx.font = `${weight} ${size}px ${fontFamily}`;
 }
 
-// 中間調をなくして黒／白のみにする（サーマル印字のがたつき対策）
-function binarizeCanvas(canvas) {
+// 中間調をなくして黒／白のみにする（サーマル印字は1ドット単位の白黒しか出せない）
+// しきい値を高めに取り、わずかでも文字が掛かったドットは黒に倒して掠れを防ぐ
+function binarizeCanvas(canvas, threshold) {
     const ctx = canvas.getContext('2d');
     const image = ctx.getImageData(0, 0, canvas.width, canvas.height);
     const data = image.data;
+    const limit = typeof threshold === 'number' ? threshold : 185;
 
     for (let i = 0; i < data.length; i += 4) {
         const luminance = data[i] * 0.299 + data[i + 1] * 0.587 + data[i + 2] * 0.114;
-        const value = luminance < 170 ? 0 : 255;
+        const value = luminance < limit ? 0 : 255;
         data[i] = value;
         data[i + 1] = value;
         data[i + 2] = value;
@@ -772,13 +792,16 @@ async function createMPB20LabelPdf(labelData) {
     if (labelData.printNotice) yEstimate += labelData.noticeLines.length * fonts.notice.line + 14;
     yEstimate += fonts.footer.line + qrSize + 10 + fonts.footer.line + paddingBottom;
 
+    // 印字ドットと等倍で文字を描くと画線が1ドット未満になって掠れるため、
+    // いったら拡大して描き、最後に等倍へ縮小してからドットを判定する
+    const supersample = 3;
     const canvas = document.createElement('canvas');
-    canvas.width = widthPx;
-    canvas.height = Math.ceil(yEstimate);
+    canvas.width = widthPx * supersample;
+    canvas.height = Math.ceil(yEstimate) * supersample;
     const ctx = canvas.getContext('2d');
-    ctx.imageSmoothingEnabled = false;
+    ctx.scale(supersample, supersample);
     ctx.fillStyle = '#ffffff';
-    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    ctx.fillRect(0, 0, widthPx, Math.ceil(yEstimate));
     ctx.fillStyle = '#000000';
 
     let y = paddingTop;
@@ -819,29 +842,34 @@ async function createMPB20LabelPdf(labelData) {
     drawFittedLine(ctx, labelData.dateString, centerX, y, contentWidthPx, fontFamily, fonts.footer.size, fonts.footer.weight);
     y += fonts.footer.line;
 
+    // QRは印字ドット数ちょうどで生成し、拡大時に補間させない
+    // （縮小後もセルの境界がドット境界と一致して潰れない）
     const drawnQrSize = Math.min(qrSize, contentWidthPx);
     const qrSource = await createQRCodeImage(labelData.dataURL, drawnQrSize);
     const qrX = Math.round(centerX - drawnQrSize / 2);
     ctx.imageSmoothingEnabled = false;
     ctx.drawImage(qrSource, qrX, Math.round(y), drawnQrSize, drawnQrSize);
+    ctx.imageSmoothingEnabled = true;
     y += drawnQrSize + 10;
 
     drawFittedLine(ctx, labelData.qrcodeNumber, centerX, y, contentWidthPx, fontFamily, fonts.footer.size, fonts.footer.weight);
     y += fonts.footer.line;
 
+    // 実際の印字ドット数（48mm × 8ドット/mm）へ縮小する
     const finalHeight = Math.ceil(y + paddingBottom);
-    let outputCanvas = canvas;
-    if (canvas.height !== finalHeight) {
-        const trimmed = document.createElement('canvas');
-        trimmed.width = widthPx;
-        trimmed.height = finalHeight;
-        const trimmedCtx = trimmed.getContext('2d');
-        trimmedCtx.imageSmoothingEnabled = false;
-        trimmedCtx.fillStyle = '#ffffff';
-        trimmedCtx.fillRect(0, 0, trimmed.width, trimmed.height);
-        trimmedCtx.drawImage(canvas, 0, 0);
-        outputCanvas = trimmed;
-    }
+    const outputCanvas = document.createElement('canvas');
+    outputCanvas.width = widthPx;
+    outputCanvas.height = finalHeight;
+    const outputCtx = outputCanvas.getContext('2d');
+    outputCtx.imageSmoothingEnabled = true;
+    outputCtx.imageSmoothingQuality = 'high';
+    outputCtx.fillStyle = '#ffffff';
+    outputCtx.fillRect(0, 0, outputCanvas.width, outputCanvas.height);
+    outputCtx.drawImage(
+        canvas,
+        0, 0, widthPx * supersample, finalHeight * supersample,
+        0, 0, widthPx, finalHeight
+    );
 
     await waitForNextFrame();
     binarizeCanvas(outputCanvas);
