@@ -347,10 +347,10 @@ function buildLabelPrintData(serialNumber, modelNumber, category, operation, pur
         category: category || '',
         modelLines: modelLines,
         priceLines: priceLines,
-        desiredLine: formatPriceDigits5FullWidth(desiredPrice) + '円',
+        desiredLine: formatPriceFullWidth(desiredPrice) + '円',
         printNotice: printNotice,
         noticeLines: printNotice ? [
-            '﹡大幅に金額が離れている場合は',
+            '大幅に金額が離れている場合は',
             'お売りする事が出来ません。',
             'ご了承下さい。'
         ] : [],
@@ -701,15 +701,46 @@ function applyMpb20Font(ctx, fontFamily, size, weight) {
     ctx.font = `${weight} ${size}px ${fontFamily}`;
 }
 
+// 中間調をなくして黒／白のみにする（サーマル印字のがたつき対策）
+function binarizeCanvas(canvas) {
+    const ctx = canvas.getContext('2d');
+    const image = ctx.getImageData(0, 0, canvas.width, canvas.height);
+    const data = image.data;
+
+    for (let i = 0; i < data.length; i += 4) {
+        const luminance = data[i] * 0.299 + data[i + 1] * 0.587 + data[i + 2] * 0.114;
+        const value = luminance < 170 ? 0 : 255;
+        data[i] = value;
+        data[i + 1] = value;
+        data[i + 2] = value;
+        data[i + 3] = 255;
+    }
+
+    ctx.putImageData(image, 0, 0);
+}
+
+// 印字幅を超える行はフォントを縮めて必ず収める
+function drawFittedLine(ctx, text, centerX, y, maxWidth, fontFamily, size, weight) {
+    let fontSize = size;
+    applyMpb20Font(ctx, fontFamily, fontSize, weight);
+    while (fontSize > 12 && ctx.measureText(text).width > maxWidth) {
+        fontSize -= 1;
+        applyMpb20Font(ctx, fontFamily, fontSize, weight);
+    }
+    drawCenteredLine(ctx, text, centerX, y);
+}
+
 async function createMPB20LabelPdf(labelData) {
-    const contentWidthPx = 384;
-    const paperWidthPx = 464;
-    const widthMm = 58;
-    const sideMarginPx = Math.round((paperWidthPx - contentWidthPx) / 2);
-    const centerX = sideMarginPx + contentWidthPx / 2;
+    // MP-B20は203dpi（8ドット/mm）。58mm用紙の実印字幅48mmに1:1で合わせる
+    const pxPerMm = 8;
+    const widthMm = 48;
+    const widthPx = widthMm * pxPerMm; // 384
+    const contentWidthPx = widthPx - 16;
+    const centerX = widthPx / 2;
+    const blockGapPx = 2 * pxPerMm; // 連番・カテゴリー・型番の間隔2mm
     const paddingTop = 20;
     const fontFamily = '"Hiragino Sans", "Hiragino Kaku Gothic ProN", "Yu Gothic", sans-serif';
-    const qrSize = 136;
+    const qrSize = 192;
 
     const fonts = {
         header: { size: 34, weight: 'bold', line: 42 },
@@ -720,8 +751,8 @@ async function createMPB20LabelPdf(labelData) {
         footer: { size: 22, weight: 'bold', line: 28 }
     };
 
-    let yEstimate = paddingTop + fonts.header.line;
-    if (labelData.category) yEstimate += fonts.body.line;
+    let yEstimate = paddingTop + fonts.header.line + blockGapPx;
+    if (labelData.category) yEstimate += fonts.body.line + blockGapPx;
     yEstimate += labelData.modelLines.length * fonts.body.line + 14;
     yEstimate += labelData.priceLines.length * fonts.price.line;
     if (labelData.priceLines.length) yEstimate += 14;
@@ -730,7 +761,7 @@ async function createMPB20LabelPdf(labelData) {
     yEstimate += fonts.footer.line + qrSize + fonts.footer.line + 24;
 
     const canvas = document.createElement('canvas');
-    canvas.width = paperWidthPx;
+    canvas.width = widthPx;
     canvas.height = Math.ceil(yEstimate);
     const ctx = canvas.getContext('2d');
     ctx.imageSmoothingEnabled = false;
@@ -740,64 +771,57 @@ async function createMPB20LabelPdf(labelData) {
 
     let y = paddingTop;
 
-    applyMpb20Font(ctx, fontFamily, fonts.header.size, fonts.header.weight);
-    drawCenteredLine(ctx, labelData.headerLine, centerX, y);
-    y += fonts.header.line;
+    drawFittedLine(ctx, labelData.headerLine, centerX, y, contentWidthPx, fontFamily, fonts.header.size, fonts.header.weight);
+    y += fonts.header.line + blockGapPx;
 
     if (labelData.category) {
-        applyMpb20Font(ctx, fontFamily, fonts.body.size, fonts.body.weight);
-        drawCenteredLine(ctx, labelData.category, centerX, y);
-        y += fonts.body.line;
+        drawFittedLine(ctx, labelData.category, centerX, y, contentWidthPx, fontFamily, fonts.body.size, fonts.body.weight);
+        y += fonts.body.line + blockGapPx;
     }
 
-    applyMpb20Font(ctx, fontFamily, fonts.body.size, fonts.body.weight);
     labelData.modelLines.forEach(function(line) {
-        drawCenteredLine(ctx, line, centerX, y);
+        drawFittedLine(ctx, line, centerX, y, contentWidthPx, fontFamily, fonts.body.size, fonts.body.weight);
         y += fonts.body.line;
     });
     y += 14;
 
-    applyMpb20Font(ctx, fontFamily, fonts.price.size, fonts.price.weight);
     labelData.priceLines.forEach(function(line) {
-        drawCenteredLine(ctx, line, centerX, y);
+        drawFittedLine(ctx, line, centerX, y, contentWidthPx, fontFamily, fonts.price.size, fonts.price.weight);
         y += fonts.price.line;
     });
     if (labelData.priceLines.length) {
         y += 14;
     }
 
-    applyMpb20Font(ctx, fontFamily, fonts.desired.size, fonts.desired.weight);
-    drawCenteredLine(ctx, labelData.desiredLine, centerX, y);
+    drawFittedLine(ctx, labelData.desiredLine, centerX, y, contentWidthPx, fontFamily, fonts.desired.size, fonts.desired.weight);
     y += fonts.desired.line;
 
     if (labelData.printNotice) {
-        applyMpb20Font(ctx, fontFamily, fonts.notice.size, fonts.notice.weight);
         labelData.noticeLines.forEach(function(line) {
-            drawCenteredLine(ctx, line, centerX, y);
+            drawFittedLine(ctx, line, centerX, y, contentWidthPx, fontFamily, fonts.notice.size, fonts.notice.weight);
             y += fonts.notice.line;
         });
         y += 14;
     }
 
-    applyMpb20Font(ctx, fontFamily, fonts.footer.size, fonts.footer.weight);
-    drawCenteredLine(ctx, labelData.dateString, centerX, y);
+    drawFittedLine(ctx, labelData.dateString, centerX, y, contentWidthPx, fontFamily, fonts.footer.size, fonts.footer.weight);
     y += fonts.footer.line;
 
-    const qrSource = await createQRCodeImage(labelData.dataURL, qrSize);
-    const qrX = Math.round(centerX - qrSize / 2);
+    const drawnQrSize = Math.min(qrSize, contentWidthPx);
+    const qrSource = await createQRCodeImage(labelData.dataURL, drawnQrSize);
+    const qrX = Math.round(centerX - drawnQrSize / 2);
     ctx.imageSmoothingEnabled = false;
-    ctx.drawImage(qrSource, qrX, Math.round(y), qrSize, qrSize);
-    y += qrSize + 10;
+    ctx.drawImage(qrSource, qrX, Math.round(y), drawnQrSize, drawnQrSize);
+    y += drawnQrSize + 10;
 
-    applyMpb20Font(ctx, fontFamily, fonts.footer.size, fonts.footer.weight);
-    drawCenteredLine(ctx, labelData.qrcodeNumber, centerX, y);
+    drawFittedLine(ctx, labelData.qrcodeNumber, centerX, y, contentWidthPx, fontFamily, fonts.footer.size, fonts.footer.weight);
     y += fonts.footer.line;
 
     const finalHeight = Math.ceil(y + 20);
     let outputCanvas = canvas;
     if (canvas.height !== finalHeight) {
         const trimmed = document.createElement('canvas');
-        trimmed.width = paperWidthPx;
+        trimmed.width = widthPx;
         trimmed.height = finalHeight;
         const trimmedCtx = trimmed.getContext('2d');
         trimmedCtx.imageSmoothingEnabled = false;
@@ -808,6 +832,7 @@ async function createMPB20LabelPdf(labelData) {
     }
 
     await waitForNextFrame();
+    binarizeCanvas(outputCanvas);
 
     const imgData = outputCanvas.toDataURL('image/png');
     const heightMm = widthMm * (outputCanvas.height / outputCanvas.width);
@@ -915,16 +940,10 @@ function toFullWidth(str) {
     });
 }
 
-function padWithZeros(value, length) {
+function formatPriceFullWidth(value) {
     const n = Number(value);
-    if (!Number.isFinite(n)) return '0'.repeat(length);
-    const int = Math.trunc(n);
-    const s = String(Math.max(0, int));
-    return s.padStart(length, '0');
-}
-
-function formatPriceDigits5FullWidth(value) {
-    return toFullWidth(padWithZeros(value, 5));
+    if (!Number.isFinite(n)) return toFullWidth('0');
+    return toFullWidth(String(Math.max(0, Math.trunc(n))));
 }
 
 function formatSerialDigits5FullWidth(serialNumber) {
@@ -952,7 +971,7 @@ function buildQrcodeNumberFullWidth(dateObj, serialNumber) {
 }
 
 function buildPriceLine(label, value) {
-    return `${label}${formatPriceDigits5FullWidth(value)}円`;
+    return `${label}${formatPriceFullWidth(value)}円`;
 }
 
 // Bluetooth接続で印刷
