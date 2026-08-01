@@ -1645,8 +1645,10 @@ function generateDataURL(modelNumber, category, operation, purchasePrice, batter
 }
 
 // QRから開いた値札は、パスワード確認後にだけフォームへ反映する
-const QR_LOAD_PASSWORD = '4126';
+const QR_LOAD_PASSWORD = '1121';
+const QR_PASSWORD_MAX_ATTEMPTS = 3;
 let pendingQrPayload = null;
+let qrPasswordFailCount = 0;
 
 function clearUrlParams() {
     const cleanURL = window.location.origin + window.location.pathname;
@@ -1719,8 +1721,11 @@ function showQrPasswordPrompt() {
     document.getElementById('sideMenu').classList.remove('active');
     document.getElementById('historyModal').classList.remove('active');
 
+    qrPasswordFailCount = 0;
+
     if (error) {
         error.hidden = true;
+        error.textContent = 'パスワードが違います';
     }
     if (input) {
         input.value = '';
@@ -1757,13 +1762,54 @@ function hideQrPasswordPrompt() {
     }
 }
 
+// キャンセルやパスワード失敗上限で、値札画面ごと消す
+function dismissQrAccessPage() {
+    pendingQrPayload = null;
+    qrPasswordFailCount = 0;
+
+    try {
+        window.history.replaceState({}, '', 'about:blank');
+    } catch (e) {
+        // ignore
+    }
+
+    try {
+        document.open();
+        document.write('<!DOCTYPE html><html><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title></title><style>html,body{margin:0;height:100%;background:#fff;}</style></head><body></body></html>');
+        document.close();
+    } catch (e) {
+        try {
+            window.location.replace('about:blank');
+        } catch (e2) {
+            // ignore
+        }
+    }
+
+    try {
+        window.close();
+    } catch (e) {
+        // Safari等ではスクリプト起点でないタブは閉じられないため、白紙表示で代替する
+    }
+}
+
 function submitQrPasswordPrompt() {
     const input = document.getElementById('qrPasswordInput');
     const error = document.getElementById('qrPasswordError');
     const entered = input ? input.value.trim() : '';
 
     if (entered !== QR_LOAD_PASSWORD) {
-        if (error) error.hidden = false;
+        qrPasswordFailCount += 1;
+        const remaining = QR_PASSWORD_MAX_ATTEMPTS - qrPasswordFailCount;
+
+        if (remaining <= 0) {
+            dismissQrAccessPage();
+            return;
+        }
+
+        if (error) {
+            error.hidden = false;
+            error.textContent = 'パスワードが違います（残り' + remaining + '回）';
+        }
         if (input) {
             input.value = '';
             input.focus();
@@ -1773,14 +1819,13 @@ function submitQrPasswordPrompt() {
 
     const payload = pendingQrPayload;
     pendingQrPayload = null;
+    qrPasswordFailCount = 0;
     hideQrPasswordPrompt();
     applyQrPayload(payload);
 }
 
 function cancelQrPasswordPrompt() {
-    pendingQrPayload = null;
-    hideQrPasswordPrompt();
-    showMessage('QRコードの読み込みをキャンセルしました', 'success');
+    dismissQrAccessPage();
 }
 
 // URLパラメータから値札データを読み込む
