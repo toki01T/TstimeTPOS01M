@@ -1597,10 +1597,9 @@ function showMessage(message, type) {
 
 // === 履歴管理機能 ===
 
-// 値札の内容をURLに直接書くとQR読み取り時やアドレスバーで中身が見えてしまうため、
-// base64url にまとめた1個のパラメータ（d）として持たせる
-function encodeLabelPayload(payload) {
-    const bytes = new TextEncoder().encode(JSON.stringify(payload));
+// 値札の内容をURLに平文で載せると、QR読み取りやアドレスバーから悪用できる。
+// パスワードでXOR暗号化し、正しいパスワード入力後だけ中身を復元する。
+function bytesToBase64Url(bytes) {
     let binary = '';
     for (let i = 0; i < bytes.length; i++) {
         binary += String.fromCharCode(bytes[i]);
@@ -1608,26 +1607,105 @@ function encodeLabelPayload(payload) {
     return btoa(binary).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
 }
 
-function decodeLabelPayload(encoded) {
+function base64UrlToBytes(encoded) {
+    let base64 = encoded.replace(/-/g, '+').replace(/_/g, '/');
+    while (base64.length % 4 !== 0) {
+        base64 += '=';
+    }
+    const binary = atob(base64);
+    const bytes = new Uint8Array(binary.length);
+    for (let i = 0; i < binary.length; i++) {
+        bytes[i] = binary.charCodeAt(i);
+    }
+    return bytes;
+}
+
+function expandKeystream(password, length, nonce) {
+    const seed = String(password) + '|' + String(nonce) + '|TstimeQR-v1';
+    let state = 2166136261;
+    for (let i = 0; i < seed.length; i++) {
+        state ^= seed.charCodeAt(i);
+        state = Math.imul(state, 16777619);
+    }
+    const out = new Uint8Array(length);
+    for (let i = 0; i < length; i++) {
+        state = (Math.imul(state, 1664525) + 1013904223) >>> 0;
+        out[i] = (state >>> 24) & 0xff;
+    }
+    return out;
+}
+
+function encryptLabelPayload(payload, password) {
+    const plain = new TextEncoder().encode(JSON.stringify(payload));
+    const nonce = Date.now().toString(36) + Math.random().toString(36).slice(2, 10);
+    const keystream = expandKeystream(password, plain.length, nonce);
+    const cipher = new Uint8Array(plain.length);
+    for (let i = 0; i < plain.length; i++) {
+        cipher[i] = plain[i] ^ keystream[i];
+    }
+    return 'e1.' + bytesToBase64Url(new TextEncoder().encode(nonce)) + '.' + bytesToBase64Url(cipher);
+}
+
+function decryptLabelPayload(token, password) {
     try {
-        let base64 = encoded.replace(/-/g, '+').replace(/_/g, '/');
-        while (base64.length % 4 !== 0) {
-            base64 += '=';
+        if (!token || token.indexOf('e1.') !== 0) return null;
+        const parts = token.split('.');
+        if (parts.length !== 3) return null;
+        const nonce = new TextDecoder().decode(base64UrlToBytes(parts[1]));
+        const cipher = base64UrlToBytes(parts[2]);
+        const keystream = expandKeystream(password, cipher.length, nonce);
+        const plain = new Uint8Array(cipher.length);
+        for (let i = 0; i < cipher.length; i++) {
+            plain[i] = cipher[i] ^ keystream[i];
         }
-        const binary = atob(base64);
-        const bytes = new Uint8Array(binary.length);
-        for (let i = 0; i < binary.length; i++) {
-            bytes[i] = binary.charCodeAt(i);
-        }
-        const parsed = JSON.parse(new TextDecoder().decode(bytes));
+        const parsed = JSON.parse(new TextDecoder().decode(plain));
         return parsed && typeof parsed === 'object' ? parsed : null;
     } catch (error) {
-        console.warn('QRコードのデータを解析できません:', error);
         return null;
     }
 }
 
-// データURLを生成
+// 旧形式（暗号化前）のQRコード互換用
+function decodeLabelPayloadLegacy(encoded) {
+    try {
+        const bytes = base64UrlToBytes(encoded);
+        const parsed = JSON.parse(new TextDecoder().decode(bytes));
+        return parsed && typeof parsed === 'object' ? parsed : null;
+    } catch (error) {
+        return null;
+    }
+}
+
+function packedToPendingPayload(packed) {
+    if (!packed || typeof packed !== 'object') return null;
+
+    const serialNumber = packed.s != null ? String(packed.s) : null;
+    const parsedSerial = serialNumber === null ? null : Number(serialNumber);
+    const validSerial = Number.isSafeInteger(parsedSerial) && parsedSerial > 0
+        ? parsedSerial
+        : null;
+
+    return {
+        serialNumber: serialNumber,
+        validSerial: validSerial,
+        modelNumber: packed.m != null ? String(packed.m) : null,
+        category: packed.c != null ? String(packed.c) : null,
+        operation: packed.o != null ? String(packed.o) : null,
+        purchasePrice: packed.p1 != null ? String(packed.p1) : null,
+        batteryCost: packed.p2 != null ? String(packed.p2) : null,
+        beltCost: packed.p3 != null ? String(packed.p3) : null,
+        desiredPrice: packed.p4 != null ? String(packed.p4) : null
+    };
+}
+
+// QRから開いた値札は、パスワード確認後にだけフォームへ反映する
+const QR_LOAD_PASSWORD = '1121';
+const QR_PASSWORD_MAX_ATTEMPTS = 3;
+let pendingQrEncrypted = null;
+let pendingQrLegacyPayload = null;
+let qrPasswordFailCount = 0;
+
+// データURLを生成（パスワードで暗号化した1パラメータ）
 function generateDataURL(modelNumber, category, operation, purchasePrice, batteryCost, beltCost, desiredPrice, serialNumber) {
     const baseURL = window.location.origin + window.location.pathname;
     const payload = {};
@@ -1641,18 +1719,18 @@ function generateDataURL(modelNumber, category, operation, purchasePrice, batter
     if (beltCost) payload.p3 = beltCost;
     if (desiredPrice) payload.p4 = desiredPrice;
 
-    return baseURL + '?d=' + encodeLabelPayload(payload);
+    return baseURL + '?d=' + encryptLabelPayload(payload, QR_LOAD_PASSWORD);
 }
-
-// QRから開いた値札は、パスワード確認後にだけフォームへ反映する
-const QR_LOAD_PASSWORD = '1121';
-const QR_PASSWORD_MAX_ATTEMPTS = 3;
-let pendingQrPayload = null;
-let qrPasswordFailCount = 0;
 
 function clearUrlParams() {
     const cleanURL = window.location.origin + window.location.pathname;
     window.history.replaceState({}, document.title, cleanURL);
+}
+
+function clearPendingQrData() {
+    pendingQrEncrypted = null;
+    pendingQrLegacyPayload = null;
+    qrPasswordFailCount = 0;
 }
 
 function applyQrPayload(payload) {
@@ -1755,49 +1833,59 @@ function hideQrPasswordPrompt() {
     if (error) error.hidden = true;
     if (input) input.value = '';
 
-    // 履歴やサイドメニューが開いていなければオーバーレイも閉じる
     if (!document.getElementById('historyModal').classList.contains('active') &&
         !document.getElementById('sideMenu').classList.contains('active')) {
         overlay.classList.remove('active');
     }
 }
 
-// キャンセルやパスワード失敗上限で、値札画面ごと消す
+// キャンセルやパスワード失敗上限で、値札画面ごと完全に消す
 function dismissQrAccessPage() {
-    pendingQrPayload = null;
-    qrPasswordFailCount = 0;
+    clearPendingQrData();
 
+    // 戻る操作でも値札画面に戻れないよう、白紙ページへ置き換える
     try {
-        window.history.replaceState({}, '', 'about:blank');
+        window.location.replace('about:blank');
+        return;
     } catch (e) {
-        // ignore
+        // fall through
     }
 
     try {
         document.open();
         document.write('<!DOCTYPE html><html><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title></title><style>html,body{margin:0;height:100%;background:#fff;}</style></head><body></body></html>');
         document.close();
-    } catch (e) {
-        try {
-            window.location.replace('about:blank');
-        } catch (e2) {
-            // ignore
-        }
+    } catch (e2) {
+        // ignore
     }
 
     try {
         window.close();
-    } catch (e) {
-        // Safari等ではスクリプト起点でないタブは閉じられないため、白紙表示で代替する
+    } catch (e3) {
+        // ignore
     }
+}
+
+function resolveQrPayloadWithPassword(entered) {
+    if (pendingQrEncrypted) {
+        const packed = decryptLabelPayload(pendingQrEncrypted, entered);
+        return packedToPendingPayload(packed);
+    }
+
+    if (pendingQrLegacyPayload && entered === QR_LOAD_PASSWORD) {
+        return pendingQrLegacyPayload;
+    }
+
+    return null;
 }
 
 function submitQrPasswordPrompt() {
     const input = document.getElementById('qrPasswordInput');
     const error = document.getElementById('qrPasswordError');
     const entered = input ? input.value.trim() : '';
+    const payload = resolveQrPayloadWithPassword(entered);
 
-    if (entered !== QR_LOAD_PASSWORD) {
+    if (!payload) {
         qrPasswordFailCount += 1;
         const remaining = QR_PASSWORD_MAX_ATTEMPTS - qrPasswordFailCount;
 
@@ -1817,9 +1905,7 @@ function submitQrPasswordPrompt() {
         return;
     }
 
-    const payload = pendingQrPayload;
-    pendingQrPayload = null;
-    qrPasswordFailCount = 0;
+    clearPendingQrData();
     hideQrPasswordPrompt();
     applyQrPayload(payload);
 }
@@ -1831,37 +1917,50 @@ function cancelQrPasswordPrompt() {
 // URLパラメータから値札データを読み込む
 function loadFromURL() {
     const urlParams = new URLSearchParams(window.location.search);
-
-    // 新形式（d=...）を優先し、旧形式のQRコードも読めるようにしておく
     const encoded = urlParams.get('d');
-    const packed = encoded ? decodeLabelPayload(encoded) : null;
-    const readParam = function(shortKey, legacyKey) {
-        if (packed) {
-            const value = packed[shortKey];
-            return value === undefined || value === null ? null : String(value);
-        }
-        return urlParams.get(legacyKey);
-    };
 
-    const serialNumber = readParam('s', 'serial');
+    // 新形式（暗号化）: パスワード入力前に中身を復元しない
+    if (encoded && encoded.indexOf('e1.') === 0) {
+        pendingQrEncrypted = encoded;
+        pendingQrLegacyPayload = null;
+        clearUrlParams();
+        showQrPasswordPrompt();
+        return;
+    }
+
+    // 暗号化前の d=... 形式
+    if (encoded) {
+        const packed = decodeLabelPayloadLegacy(encoded);
+        const payload = packedToPendingPayload(packed);
+        if (payload && (payload.serialNumber || payload.modelNumber || payload.category ||
+            payload.operation || payload.purchasePrice || payload.batteryCost ||
+            payload.beltCost || payload.desiredPrice)) {
+            pendingQrEncrypted = null;
+            pendingQrLegacyPayload = payload;
+            clearUrlParams();
+            showQrPasswordPrompt();
+            return;
+        }
+    }
+
+    // さらに古い ?serial=&model=... 形式
+    const serialNumber = urlParams.get('serial');
     const parsedSerial = serialNumber === null ? null : Number(serialNumber);
     const validSerial = Number.isSafeInteger(parsedSerial) && parsedSerial > 0
         ? parsedSerial
         : null;
-    const modelNumber = readParam('m', 'model');
-    const category = readParam('c', 'category');
-    const operation = readParam('o', 'operation');
-    const purchasePrice = readParam('p1', 'price1');
-    const batteryCost = readParam('p2', 'price2');
-    const beltCost = readParam('p3', 'price3');
-    const desiredPrice = readParam('p4', 'price4');
+    const modelNumber = urlParams.get('model');
+    const category = urlParams.get('category');
+    const operation = urlParams.get('operation');
+    const purchasePrice = urlParams.get('price1');
+    const batteryCost = urlParams.get('price2');
+    const beltCost = urlParams.get('price3');
+    const desiredPrice = urlParams.get('price4');
 
-    // パラメータが存在する場合のみ読み込む
     if (serialNumber || modelNumber || category || operation ||
         purchasePrice || batteryCost || beltCost || desiredPrice) {
-        console.log('URLパラメータから値札データを読み込みます（パスワード確認待ち）');
-
-        pendingQrPayload = {
+        pendingQrEncrypted = null;
+        pendingQrLegacyPayload = {
             serialNumber: serialNumber,
             validSerial: validSerial,
             modelNumber: modelNumber,
@@ -1872,11 +1971,7 @@ function loadFromURL() {
             beltCost: beltCost,
             desiredPrice: desiredPrice
         };
-
-        // アドレスバーに値札の情報を残さない
         clearUrlParams();
-
-        // 認証前に値札内容を画面へ出さない。正しいパスワード入力後に反映する
         showQrPasswordPrompt();
     }
 }

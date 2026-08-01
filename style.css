@@ -645,6 +645,10 @@ body.qr-locked .hamburger-menu {
     visibility: hidden;
 }
 
+body.qr-locked .container > *:not(.overlay):not(.password-modal) {
+    visibility: hidden;
+}
+
 .history-modal {
     display: none;
     position: fixed;
