@@ -1014,7 +1014,7 @@ async function createMPB20LabelPdf(labelData) {
     const paddingTop = 0;
     // MP-B20はサーマルヘッドから紙排出口まで距離があり、印字直後はその分が本体内に残る。
     // URL Print Agentに追加フィードを指示する手段が無いため、末尾の余白で押し出す
-    const paddingBottom = 18 * pxPerMm;
+    const paddingBottom = 16 * pxPerMm;
     const fontFamily = MPB20_FONT_FAMILY;
     // 型番が長いほどQRのセル数が増えるので、大きさは1セル3ドットを保てるよう可変にする
     const qr = createPrintableQRCode(labelData.dataURL, contentWidthPx);
