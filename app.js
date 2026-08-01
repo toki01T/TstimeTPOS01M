@@ -1843,27 +1843,31 @@ function hideQrPasswordPrompt() {
 function dismissQrAccessPage() {
     clearPendingQrData();
 
-    // 戻る操作でも値札画面に戻れないよう、白紙ページへ置き換える
+    // まずタブ自体を閉じる。閉じられればURLも履歴も残らない。
+    // window.open('', '_self') はスクリプト起点でないタブでも
+    // close() を受け付けさせるための定番の前処理
     try {
-        window.location.replace('about:blank');
-        return;
-    } catch (e) {
-        // fall through
-    }
-
-    try {
-        document.open();
-        document.write('<!DOCTYPE html><html><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title></title><style>html,body{margin:0;height:100%;background:#fff;}</style></head><body></body></html>');
-        document.close();
-    } catch (e2) {
-        // ignore
-    }
-
-    try {
+        window.open('', '_self');
         window.close();
-    } catch (e3) {
+    } catch (e) {
         // ignore
     }
+
+    // 閉じられない環境（iOSのSafariやホーム画面アプリ）では
+    // about:blank へ置き換えて、URLと戻り先を消す
+    setTimeout(function() {
+        try {
+            window.location.replace('about:blank');
+        } catch (e) {
+            try {
+                document.open();
+                document.write('<!DOCTYPE html><html><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title></title><style>html,body{margin:0;height:100%;background:#fff;}</style></head><body></body></html>');
+                document.close();
+            } catch (e2) {
+                // ignore
+            }
+        }
+    }, 100);
 }
 
 function resolveQrPayloadWithPassword(entered) {
