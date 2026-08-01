@@ -907,6 +907,9 @@ function drawFittedLine(ctx, text, centerX, y, maxWidth, fontFamily, size, weigh
 // canvas描画前に必ず読み込み完了を待つ（未読込だとフォールバックで印字が戻る）
 const MPB20_FONT_FAMILY = '"BIZ UDGothic", "Hiragino Sans", "Hiragino Kaku Gothic ProN", sans-serif';
 
+// 「T❜s time」の行だけは見た目を変えたくないので、従来のフォントで描く
+const MPB20_HEADER_FONT_FAMILY = '"Hiragino Sans", "Hiragino Kaku Gothic ProN", "Yu Gothic", sans-serif';
+
 async function ensurePrintFontReady() {
     if (!document.fonts || !document.fonts.load) return;
     try {
@@ -964,7 +967,7 @@ async function createMPB20LabelPdf(labelData) {
     const drawLabel = function(ctx) {
         let y = paddingTop;
 
-        drawFittedLine(ctx, labelData.headerLine, centerX, y, contentWidthPx, fontFamily, fonts.header.size, fonts.header.weight);
+        drawFittedLine(ctx, labelData.headerLine, centerX, y, contentWidthPx, MPB20_HEADER_FONT_FAMILY, fonts.header.size, fonts.header.weight);
         y += fonts.header.line + blockGapPx;
 
         if (labelData.category) {
