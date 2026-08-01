@@ -113,6 +113,7 @@ document.addEventListener('DOMContentLoaded', function() {
         savePrinterSelection('mpb20');
         updatePrinterDisplay('mpb20');
         showMessage('プリンターをMP-B20に設定しました', 'success');
+        preloadMpb20FontIfSelected();
     });
     
     // ハンバーガーメニューの設定
@@ -269,11 +270,9 @@ document.addEventListener('DOMContentLoaded', function() {
 
     setupBottomButtonReveal();
 
-    // 印刷時に待ちたくないので、起動時から同梱フォントを先読みする
-    // ここで失敗しても印刷時に再試行し、印刷処理側では失敗を明示する
-    ensurePrintFontReady().catch(function(error) {
-        console.warn('BIZ UDゴシックの先読み失敗', error);
-    });
+    // BIZ UDゴシックはMP-B20の印字にしか使わないため、
+    // MP-B20を選んでいるときだけ先読みする（4MB超のため他機種では読み込まない）
+    preloadMpb20FontIfSelected();
 
     const versionLabel = document.getElementById('appVersion');
     if (versionLabel) versionLabel.textContent = APP_VERSION;
@@ -905,6 +904,16 @@ let mpb20FontFace = null;
 
 // 「T❜s time」の行だけは見た目を変えたくないので、従来のフォントで描く
 const MPB20_HEADER_FONT_FAMILY = '"Hiragino Sans", "Hiragino Kaku Gothic ProN", "Yu Gothic", sans-serif';
+
+// 印刷時に待たせたくないので先読みする。
+// ただしMP-B20以外では一切使わないフォントなので、選択中のときだけ読む
+function preloadMpb20FontIfSelected() {
+    if (loadPrinterSelection() !== 'mpb20') return;
+    ensurePrintFontReady().catch(function(error) {
+        // 失敗しても印刷時に再試行し、そこで結果を明示する
+        console.warn('BIZ UDゴシックの先読み失敗', error);
+    });
+}
 
 async function ensurePrintFontReady() {
     if (!document.fonts || typeof FontFace === 'undefined') {
