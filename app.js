@@ -213,7 +213,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
     modelNumberField.addEventListener('compositionend', function() {
         modelNumberComposing = false;
-        autoLineBreakSmart(this, PRINT_LINE_UNITS);
+        autoLineBreakSmart(this, MODEL_LINE_CHARS);
         autoGrowTextarea(this);
         updatePreview();
     });
@@ -225,7 +225,7 @@ document.addEventListener('DOMContentLoaded', function() {
             return;
         }
 
-        autoLineBreakSmart(this, PRINT_LINE_UNITS);
+        autoLineBreakSmart(this, MODEL_LINE_CHARS);
         autoGrowTextarea(this);
         updatePreview();
     });
@@ -241,7 +241,7 @@ document.addEventListener('DOMContentLoaded', function() {
     // 貼り付け時にも同じ幅で自動改行
     modelNumberField.addEventListener('paste', function(e) {
         setTimeout(() => {
-            autoLineBreakForPaste(this, PRINT_LINE_UNITS);
+            autoLineBreakForPaste(this, MODEL_LINE_CHARS);
             autoGrowTextarea(this);
             updatePreview();
         }, 10);
@@ -425,11 +425,11 @@ function setupBottomButtonReveal() {
 function buildLabelPrintData(serialNumber, modelNumber, category, operation, purchasePrice, batteryCost, beltCost, desiredPrice) {
     const now = new Date();
     const printNotice = document.getElementById('printNotice').checked;
-    // 型番は入力された表記のまま印字する。
-    // 数字だけを全角にすると「T２５００-SBGX２６３」のように英字と幅が揃わない
-    const modelLines = modelNumber.includes('\n')
-        ? modelNumber.split('\n')
-        : splitTextByWidth(modelNumber, PRINT_LINE_UNITS);
+    // 型番は英字・数字・記号をすべて全角に揃えて印字する
+    const normalizedModelNumber = toFullWidthAll(modelNumber);
+    const modelLines = normalizedModelNumber.includes('\n')
+        ? normalizedModelNumber.split('\n')
+        : splitTextByWidth(normalizedModelNumber, PRINT_LINE_UNITS);
 
     const operationLines = operation ? splitOperationText(toFullWidth(operation)) : [];
 
@@ -1158,8 +1158,8 @@ function escapeXml(str) {
 // 半角を1、全角を2として行の幅を数える（58mm用紙は1行あたり半角32文字）
 const PRINT_LINE_UNITS = 32;
 
-// 入力欄の字送りを詰める際の基準。全角が最も広いので、
-// 全角16文字（=半角32文字分）が収まれば他の組み合わせも収まる
+// 型番の1行の文字数。印字時は全角に揃えるので、全角16文字（=半角32文字分）が上限。
+// 入力欄の字送りを詰める基準にもこの値を使う
 const MODEL_LINE_CHARS = PRINT_LINE_UNITS / 2;
 
 function textWidthUnits(text) {
@@ -1233,20 +1233,27 @@ function autoLineBreak(textarea, maxCharsPerLine) {
 }
 
 // 貼り付け時の自動改行処理（手動改行を保持しながら超過行を分割）
-function autoLineBreakForPaste(textarea, maxUnitsPerLine) {
+function autoLineBreakForPaste(textarea, maxCharsPerLine) {
     const formatted = textarea.value.split('\n').flatMap(function(line) {
-        return textWidthUnits(line) > maxUnitsPerLine
-            ? splitTextByWidth(line, maxUnitsPerLine)
-            : [line];
+        const chars = [...line];
+        if (chars.length <= maxCharsPerLine) return [line];
+
+        const out = [];
+        for (let i = 0; i < chars.length; i += maxCharsPerLine) {
+            out.push(chars.slice(i, i + maxCharsPerLine).join(''));
+        }
+        return out;
     });
 
     textarea.value = formatted.join('\n');
 }
 
-// 手動改行を残したまま印字幅で折り返し、カーソルの移動先も同時に求める。
+// 手動改行を残したまま指定文字数で折り返し、カーソルの移動先も同時に求める。
+// 型番は印字時に全角へ揃えるので、半角で入力しても1文字が全角1文字分の幅になる。
+// そのため幅ではなく文字数で数えるのが正しい。
 // 折り返しの前後で文字の並びは変わらないので、元の文字を1つずつ書き写しながら
 // カーソルが何文字目にあったかを追いかければ、挿入した改行の分だけ正確にずれる
-function wrapWithCursor(value, maxUnitsPerLine, cursorPos) {
+function wrapWithCursor(value, maxCharsPerLine, cursorPos) {
     const lines = value.split('\n');
     let out = '';
     let readCount = 0;
@@ -1259,17 +1266,16 @@ function wrapWithCursor(value, maxUnitsPerLine, cursorPos) {
             readCount++;
         }
 
-        let units = 0;
+        let count = 0;
         // サロゲートペアを壊さないよう、コードポイント単位で走査する
         for (const ch of lines[i]) {
-            const chUnits = textWidthUnits(ch);
-            if (units > 0 && units + chUnits > maxUnitsPerLine) {
+            if (count > 0 && count >= maxCharsPerLine) {
                 out += '\n';
-                units = 0;
+                count = 0;
             }
             if (readCount === cursorPos && cursor === null) cursor = out.length;
             out += ch;
-            units += chUnits;
+            count++;
             readCount += ch.length;
         }
     }
@@ -1277,9 +1283,9 @@ function wrapWithCursor(value, maxUnitsPerLine, cursorPos) {
     return { value: out, cursor: cursor === null ? out.length : cursor };
 }
 
-// スマートな自動改行（手動改行を保持しつつ、印字幅の超過分を自動分割）
-function autoLineBreakSmart(textarea, maxUnitsPerLine) {
-    const wrapped = wrapWithCursor(textarea.value, maxUnitsPerLine, textarea.selectionStart);
+// スマートな自動改行（手動改行を保持しつつ、超過分を自動分割）
+function autoLineBreakSmart(textarea, maxCharsPerLine) {
+    const wrapped = wrapWithCursor(textarea.value, maxCharsPerLine, textarea.selectionStart);
     if (wrapped.value === textarea.value) return;
 
     textarea.value = wrapped.value;
@@ -1291,6 +1297,14 @@ function toFullWidth(str) {
     return str.replace(/[0-9]/g, function(s) {
         return String.fromCharCode(s.charCodeAt(0) + 0xFEE0);
     });
+}
+
+// 英字・数字・記号をまとめて全角にそろえる。
+// 数字だけを変換すると「T２５００-SBGX２６３」のように半角の英字と幅が揃わない
+function toFullWidthAll(str) {
+    return str.replace(/[\u0021-\u007e]/g, function(s) {
+        return String.fromCharCode(s.charCodeAt(0) + 0xFEE0);
+    }).replace(/ /g, '\u3000');
 }
 
 function formatPriceFullWidth(value) {
