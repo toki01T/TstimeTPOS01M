@@ -269,8 +269,11 @@ document.addEventListener('DOMContentLoaded', function() {
 
     setupBottomButtonReveal();
 
-    // 印刷時に待ちたくないので、起動時からBIZ UDゴシックを先読みする
-    ensurePrintFontReady();
+    // 印刷時に待ちたくないので、起動時から同梱フォントを先読みする
+    // ここで失敗しても印刷時に再試行し、印刷処理側では失敗を明示する
+    ensurePrintFontReady().catch(function(error) {
+        console.warn('BIZ UDゴシックの先読み失敗', error);
+    });
 
     const versionLabel = document.getElementById('appVersion');
     if (versionLabel) versionLabel.textContent = APP_VERSION;
@@ -903,23 +906,57 @@ function drawFittedLine(ctx, text, centerX, y, maxWidth, fontFamily, size, weigh
     drawCenteredLine(ctx, text, centerX, y);
 }
 
-// BIZ UDゴシックは読みやすさ向けのUD書体。サーマルではハネやゲタが少なく潰れにくい。
-// canvas描画前に必ず読み込み完了を待つ（未読込だとフォールバックで印字が戻る）
-const MPB20_FONT_FAMILY = '"BIZ UDGothic", "Hiragino Sans", "Hiragino Kaku Gothic ProN", sans-serif';
+// 外部CDNではなく同梱した公式TTFを固有名で登録する。
+// 固有名にすることで、読み込み失敗時に端末内の別フォントへ黙って置き換わるのを防ぐ
+const MPB20_FONT_NAME = 'TstimeBIZUDGothic';
+const MPB20_FONT_FAMILY = `"${MPB20_FONT_NAME}"`;
+let mpb20FontLoadPromise = null;
+let mpb20FontFace = null;
 
 // 「T❜s time」の行だけは見た目を変えたくないので、従来のフォントで描く
 const MPB20_HEADER_FONT_FAMILY = '"Hiragino Sans", "Hiragino Kaku Gothic ProN", "Yu Gothic", sans-serif';
 
 async function ensurePrintFontReady() {
-    if (!document.fonts || !document.fonts.load) return;
+    if (!document.fonts || typeof FontFace === 'undefined') {
+        throw new Error('この端末では印字フォントを読み込めません');
+    }
+
+    if (mpb20FontFace &&
+        mpb20FontFace.status === 'loaded' &&
+        document.fonts.has(mpb20FontFace)) {
+        return;
+    }
+
+    if (!mpb20FontLoadPromise) {
+        mpb20FontLoadPromise = (async function() {
+            const fontUrl = new URL('fonts/BIZUDGothic-Bold.ttf', document.baseURI).href;
+            mpb20FontFace = new FontFace(
+                MPB20_FONT_NAME,
+                `url("${fontUrl}") format("truetype")`,
+                { style: 'normal', weight: '700' }
+            );
+
+            await mpb20FontFace.load();
+            document.fonts.add(mpb20FontFace);
+            await document.fonts.ready;
+
+            if (mpb20FontFace.status !== 'loaded' ||
+                !document.fonts.has(mpb20FontFace)) {
+                throw new Error('BIZ UDゴシックの読み込みを確認できませんでした');
+            }
+        })().catch(function(error) {
+            // 一時的な通信・キャッシュ不良なら印刷ボタン押下時に再試行できるようにする
+            mpb20FontLoadPromise = null;
+            mpb20FontFace = null;
+            throw error;
+        });
+    }
+
     try {
-        await Promise.all([
-            document.fonts.load('700 26px "BIZ UDGothic"'),
-            document.fonts.load('400 26px "BIZ UDGothic"')
-        ]);
+        await mpb20FontLoadPromise;
         await document.fonts.ready;
-    } catch (e) {
-        console.warn('BIZ UDGothicの読み込みに失敗。代替フォントで印字します', e);
+    } catch (error) {
+        throw new Error('BIZ UDゴシックを読み込めませんでした。再読み込み後にお試しください');
     }
 }
 
