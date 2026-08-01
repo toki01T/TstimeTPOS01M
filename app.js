@@ -1009,7 +1009,8 @@ async function createMPB20LabelPdf(labelData) {
     const contentWidthPx = widthPx - 16;
     const centerX = widthPx / 2;
     const blockGapPx = 2 * pxPerMm; // 連番・カテゴリー・型番の間隔2mm
-    const paddingTop = 20;
+    // 用紙を節約するため上端まで詰める。文字は上端が基準なので0でも欠けない
+    const paddingTop = 0;
     // MP-B20はサーマルヘッドから紙排出口まで距離があり、印字直後はその分が本体内に残る。
     // URL Print Agentに追加フィードを指示する手段が無いため、末尾の余白で押し出す
     const paddingBottom = 18 * pxPerMm;
