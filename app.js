@@ -454,7 +454,7 @@ function buildLabelPrintData(serialNumber, modelNumber, category, operation, pur
         ] : [],
         dateString: formatDateJPFullWidth(now),
         qrcodeNumber: buildQrcodeNumberFullWidth(now, serialNumber),
-        dataURL: generateDataURL(modelNumber, category, operation, purchasePrice, batteryCost, beltCost, desiredPrice)
+        dataURL: generateDataURL(modelNumber, category, operation, purchasePrice, batteryCost, beltCost, desiredPrice, serialNumber)
     };
 }
 
@@ -496,7 +496,7 @@ function buildEposLabelData(serialNumber, modelNumber, category, operation, purc
         printNotice: document.getElementById('printNotice').checked,
         dateString: dateString,
         qrcodeNumber: qrcodeNumber,
-        dataURL: generateDataURL(modelNumber, category, operation, purchasePrice, batteryCost, beltCost, desiredPrice)
+        dataURL: generateDataURL(modelNumber, category, operation, purchasePrice, batteryCost, beltCost, desiredPrice, serialNumber)
     };
 }
 
@@ -1577,10 +1577,11 @@ function showMessage(message, type) {
 // === 履歴管理機能 ===
 
 // データURLを生成
-function generateDataURL(modelNumber, category, operation, purchasePrice, batteryCost, beltCost, desiredPrice) {
+function generateDataURL(modelNumber, category, operation, purchasePrice, batteryCost, beltCost, desiredPrice, serialNumber) {
     const baseURL = window.location.origin + window.location.pathname;
     const params = new URLSearchParams();
     
+    if (serialNumber) params.append('serial', serialNumber);
     if (modelNumber) params.append('model', modelNumber);
     if (category) params.append('category', category);
     if (operation) params.append('operation', operation);
@@ -1596,6 +1597,11 @@ function generateDataURL(modelNumber, category, operation, purchasePrice, batter
 function loadFromURL() {
     const urlParams = new URLSearchParams(window.location.search);
     
+    const serialNumber = urlParams.get('serial');
+    const parsedSerial = serialNumber === null ? null : Number(serialNumber);
+    const validSerial = Number.isSafeInteger(parsedSerial) && parsedSerial > 0
+        ? parsedSerial
+        : null;
     const modelNumber = urlParams.get('model');
     const category = urlParams.get('category');
     const operation = urlParams.get('operation');
@@ -1605,8 +1611,20 @@ function loadFromURL() {
     const desiredPrice = urlParams.get('price4');
     
     // パラメータが存在する場合のみ読み込む
-    if (modelNumber || category || operation) {
+    if (serialNumber || modelNumber || category || operation ||
+        purchasePrice || batteryCost || beltCost || desiredPrice) {
         console.log('URLパラメータから値札データを読み込みます');
+
+        // QRに連番がある場合は端末に保存し、このまま印刷した際にも同じ連番を使う。
+        // 既存のQRにはserialが無いため、その場合は現在の連番を変更しない
+        if (serialNumber) {
+            if (validSerial !== null) {
+                saveSerialNumber(validSerial);
+                updateSerialDisplay();
+            } else {
+                console.warn('QRコードの連番が不正なため読み込みません:', serialNumber);
+            }
+        }
         
         if (modelNumber) document.getElementById('modelNumber').value = modelNumber;
         if (purchasePrice) document.getElementById('purchasePrice').value = purchasePrice;
@@ -1642,7 +1660,10 @@ function loadFromURL() {
             }
         }
         
-        showMessage('QRコードから値札データを読み込みました', 'success');
+        const loadedSerial = validSerial !== null
+            ? `（連番: ${String(validSerial).padStart(5, '0')}）`
+            : '';
+        showMessage('QRコードから値札データを読み込みました' + loadedSerial, 'success');
         
         // URLパラメータをクリアして、再読み込み時に再度読み込まれるのを防ぐ
         const cleanURL = window.location.origin + window.location.pathname;
