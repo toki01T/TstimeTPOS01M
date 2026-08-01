@@ -634,6 +634,17 @@ body {
     display: block;
 }
 
+/* パスワード確認中は背景の値札画面を一切透かさない */
+.overlay.overlay-opaque {
+    background: #0f172a;
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+}
+
+body.qr-locked .hamburger-menu {
+    visibility: hidden;
+}
+
 .history-modal {
     display: none;
     position: fixed;

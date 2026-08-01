@@ -1597,21 +1597,51 @@ function showMessage(message, type) {
 
 // === 履歴管理機能 ===
 
+// 値札の内容をURLに直接書くとQR読み取り時やアドレスバーで中身が見えてしまうため、
+// base64url にまとめた1個のパラメータ（d）として持たせる
+function encodeLabelPayload(payload) {
+    const bytes = new TextEncoder().encode(JSON.stringify(payload));
+    let binary = '';
+    for (let i = 0; i < bytes.length; i++) {
+        binary += String.fromCharCode(bytes[i]);
+    }
+    return btoa(binary).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+}
+
+function decodeLabelPayload(encoded) {
+    try {
+        let base64 = encoded.replace(/-/g, '+').replace(/_/g, '/');
+        while (base64.length % 4 !== 0) {
+            base64 += '=';
+        }
+        const binary = atob(base64);
+        const bytes = new Uint8Array(binary.length);
+        for (let i = 0; i < binary.length; i++) {
+            bytes[i] = binary.charCodeAt(i);
+        }
+        const parsed = JSON.parse(new TextDecoder().decode(bytes));
+        return parsed && typeof parsed === 'object' ? parsed : null;
+    } catch (error) {
+        console.warn('QRコードのデータを解析できません:', error);
+        return null;
+    }
+}
+
 // データURLを生成
 function generateDataURL(modelNumber, category, operation, purchasePrice, batteryCost, beltCost, desiredPrice, serialNumber) {
     const baseURL = window.location.origin + window.location.pathname;
-    const params = new URLSearchParams();
-    
-    if (serialNumber) params.append('serial', serialNumber);
-    if (modelNumber) params.append('model', modelNumber);
-    if (category) params.append('category', category);
-    if (operation) params.append('operation', operation);
-    if (purchasePrice) params.append('price1', purchasePrice);
-    if (batteryCost) params.append('price2', batteryCost);
-    if (beltCost) params.append('price3', beltCost);
-    if (desiredPrice) params.append('price4', desiredPrice);
-    
-    return baseURL + '?' + params.toString();
+    const payload = {};
+
+    if (serialNumber) payload.s = String(serialNumber);
+    if (modelNumber) payload.m = modelNumber;
+    if (category) payload.c = category;
+    if (operation) payload.o = operation;
+    if (purchasePrice) payload.p1 = purchasePrice;
+    if (batteryCost) payload.p2 = batteryCost;
+    if (beltCost) payload.p3 = beltCost;
+    if (desiredPrice) payload.p4 = desiredPrice;
+
+    return baseURL + '?d=' + encodeLabelPayload(payload);
 }
 
 // QRから開いた値札は、パスワード確認後にだけフォームへ反映する
@@ -1699,6 +1729,8 @@ function showQrPasswordPrompt() {
     modal.classList.add('active');
     modal.setAttribute('aria-hidden', 'false');
     overlay.classList.add('active');
+    overlay.classList.add('overlay-opaque');
+    document.body.classList.add('qr-locked');
 
     setTimeout(function() {
         if (input) input.focus();
@@ -1713,6 +1745,8 @@ function hideQrPasswordPrompt() {
 
     modal.classList.remove('active');
     modal.setAttribute('aria-hidden', 'true');
+    overlay.classList.remove('overlay-opaque');
+    document.body.classList.remove('qr-locked');
     if (error) error.hidden = true;
     if (input) input.value = '';
 
@@ -1740,14 +1774,12 @@ function submitQrPasswordPrompt() {
     const payload = pendingQrPayload;
     pendingQrPayload = null;
     hideQrPasswordPrompt();
-    clearUrlParams();
     applyQrPayload(payload);
 }
 
 function cancelQrPasswordPrompt() {
     pendingQrPayload = null;
     hideQrPasswordPrompt();
-    clearUrlParams();
     showMessage('QRコードの読み込みをキャンセルしました', 'success');
 }
 
@@ -1755,18 +1787,29 @@ function cancelQrPasswordPrompt() {
 function loadFromURL() {
     const urlParams = new URLSearchParams(window.location.search);
 
-    const serialNumber = urlParams.get('serial');
+    // 新形式（d=...）を優先し、旧形式のQRコードも読めるようにしておく
+    const encoded = urlParams.get('d');
+    const packed = encoded ? decodeLabelPayload(encoded) : null;
+    const readParam = function(shortKey, legacyKey) {
+        if (packed) {
+            const value = packed[shortKey];
+            return value === undefined || value === null ? null : String(value);
+        }
+        return urlParams.get(legacyKey);
+    };
+
+    const serialNumber = readParam('s', 'serial');
     const parsedSerial = serialNumber === null ? null : Number(serialNumber);
     const validSerial = Number.isSafeInteger(parsedSerial) && parsedSerial > 0
         ? parsedSerial
         : null;
-    const modelNumber = urlParams.get('model');
-    const category = urlParams.get('category');
-    const operation = urlParams.get('operation');
-    const purchasePrice = urlParams.get('price1');
-    const batteryCost = urlParams.get('price2');
-    const beltCost = urlParams.get('price3');
-    const desiredPrice = urlParams.get('price4');
+    const modelNumber = readParam('m', 'model');
+    const category = readParam('c', 'category');
+    const operation = readParam('o', 'operation');
+    const purchasePrice = readParam('p1', 'price1');
+    const batteryCost = readParam('p2', 'price2');
+    const beltCost = readParam('p3', 'price3');
+    const desiredPrice = readParam('p4', 'price4');
 
     // パラメータが存在する場合のみ読み込む
     if (serialNumber || modelNumber || category || operation ||
@@ -1784,6 +1827,9 @@ function loadFromURL() {
             beltCost: beltCost,
             desiredPrice: desiredPrice
         };
+
+        // アドレスバーに値札の情報を残さない
+        clearUrlParams();
 
         // 認証前に値札内容を画面へ出さない。正しいパスワード入力後に反映する
         showQrPasswordPrompt();
