@@ -503,10 +503,11 @@ function buildEposPrintXml(labelData) {
     xml += '<text lang="ja"/>';
 
     // 58mm用紙・width="2"で1行16文字。
-    // 「❜」は全角幅なので、スペースを2個にして連番まで1行に収める
+    // 「’」は全角幅なので、スペースを2個にして連番まで1行に収める。
+    // 「❜」(U+275C)はShift_JISに無くプリンター側で脱落するため使えない
     xml += '<text width="2" height="1" em="true"/>';
     xml += '<text align="center"/>';
-    xml += `<text>T❜s time  ${labelData.serialHalfWidth}&#10;&#10;</text>`;
+    xml += `<text>T’s time  ${labelData.serialHalfWidth}&#10;&#10;</text>`;
 
     xml += '<text width="1" height="1" em="false"/>';
     if (labelData.category) {
