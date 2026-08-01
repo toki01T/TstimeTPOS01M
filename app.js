@@ -133,8 +133,12 @@ document.addEventListener('DOMContentLoaded', function() {
         overlay.classList.remove('active');
     });
     
-    // オーバーレイクリック - サイドメニューと履歴モーダルの両方を閉じる
+    // オーバーレイクリック - サイドメニュー・履歴・パスワード確認を閉じる
     overlay.addEventListener('click', function() {
+        if (document.getElementById('passwordModal').classList.contains('active')) {
+            cancelQrPasswordPrompt();
+            return;
+        }
         sideMenu.classList.remove('active');
         overlay.classList.remove('active');
         closeHistoryModal();
@@ -288,6 +292,23 @@ document.addEventListener('DOMContentLoaded', function() {
     if (testReturnButton) {
         testReturnButton.addEventListener('click', function() {
             window.location.href = getPrintReturnUrl();
+        });
+    }
+
+    const qrPasswordSubmit = document.getElementById('qrPasswordSubmit');
+    const qrPasswordCancel = document.getElementById('qrPasswordCancel');
+    const qrPasswordInput = document.getElementById('qrPasswordInput');
+    if (qrPasswordSubmit) qrPasswordSubmit.addEventListener('click', submitQrPasswordPrompt);
+    if (qrPasswordCancel) qrPasswordCancel.addEventListener('click', cancelQrPasswordPrompt);
+    if (qrPasswordInput) {
+        qrPasswordInput.addEventListener('keydown', function(e) {
+            if (e.key === 'Enter') {
+                e.preventDefault();
+                submitQrPasswordPrompt();
+            } else if (e.key === 'Escape') {
+                e.preventDefault();
+                cancelQrPasswordPrompt();
+            }
         });
     }
 });
@@ -1593,10 +1614,147 @@ function generateDataURL(modelNumber, category, operation, purchasePrice, batter
     return baseURL + '?' + params.toString();
 }
 
+// QRから開いた値札は、パスワード確認後にだけフォームへ反映する
+const QR_LOAD_PASSWORD = '4126';
+let pendingQrPayload = null;
+
+function clearUrlParams() {
+    const cleanURL = window.location.origin + window.location.pathname;
+    window.history.replaceState({}, document.title, cleanURL);
+}
+
+function applyQrPayload(payload) {
+    if (!payload) return;
+
+    if (payload.serialNumber) {
+        if (payload.validSerial !== null) {
+            saveSerialNumber(payload.validSerial);
+            updateSerialDisplay();
+        } else {
+            console.warn('QRコードの連番が不正なため読み込みません:', payload.serialNumber);
+        }
+    }
+
+    if (payload.modelNumber) document.getElementById('modelNumber').value = payload.modelNumber;
+    if (payload.purchasePrice) document.getElementById('purchasePrice').value = payload.purchasePrice;
+    if (payload.batteryCost) document.getElementById('batteryCost').value = payload.batteryCost;
+    if (payload.beltCost) document.getElementById('beltCost').value = payload.beltCost;
+    if (payload.desiredPrice) document.getElementById('desiredPrice').value = payload.desiredPrice;
+
+    if (payload.category) {
+        const categorySelect = document.getElementById('categoryType');
+        const categoryOptions = Array.from(categorySelect.options).map(opt => opt.value);
+
+        if (categoryOptions.includes(payload.category)) {
+            categorySelect.value = payload.category;
+        } else {
+            categorySelect.value = 'other';
+            document.getElementById('otherCategory').value = payload.category;
+            document.getElementById('otherCategoryGroup').style.display = 'block';
+        }
+    }
+
+    if (payload.operation) {
+        const operationSelect = document.getElementById('operationType');
+        const operationOptions = Array.from(operationSelect.options).map(opt => opt.value);
+
+        if (operationOptions.includes(payload.operation)) {
+            operationSelect.value = payload.operation;
+        } else {
+            operationSelect.value = 'other';
+            document.getElementById('otherOperation').value = payload.operation;
+            document.getElementById('otherOperationGroup').style.display = 'block';
+        }
+    }
+
+    const modelNumberField = document.getElementById('modelNumber');
+    if (modelNumberField) {
+        autoLineBreakSmart(modelNumberField, PRINT_LINE_UNITS);
+        autoGrowTextarea(modelNumberField);
+    }
+
+    const loadedSerial = payload.validSerial !== null
+        ? `（連番: ${String(payload.validSerial).padStart(5, '0')}）`
+        : '';
+    showMessage('QRコードから値札データを読み込みました' + loadedSerial, 'success');
+    updatePreview();
+}
+
+function showQrPasswordPrompt() {
+    const modal = document.getElementById('passwordModal');
+    const overlay = document.getElementById('overlay');
+    const input = document.getElementById('qrPasswordInput');
+    const error = document.getElementById('qrPasswordError');
+
+    document.getElementById('sideMenu').classList.remove('active');
+    document.getElementById('historyModal').classList.remove('active');
+
+    if (error) {
+        error.hidden = true;
+    }
+    if (input) {
+        input.value = '';
+    }
+
+    modal.classList.add('active');
+    modal.setAttribute('aria-hidden', 'false');
+    overlay.classList.add('active');
+
+    setTimeout(function() {
+        if (input) input.focus();
+    }, 50);
+}
+
+function hideQrPasswordPrompt() {
+    const modal = document.getElementById('passwordModal');
+    const overlay = document.getElementById('overlay');
+    const input = document.getElementById('qrPasswordInput');
+    const error = document.getElementById('qrPasswordError');
+
+    modal.classList.remove('active');
+    modal.setAttribute('aria-hidden', 'true');
+    if (error) error.hidden = true;
+    if (input) input.value = '';
+
+    // 履歴やサイドメニューが開いていなければオーバーレイも閉じる
+    if (!document.getElementById('historyModal').classList.contains('active') &&
+        !document.getElementById('sideMenu').classList.contains('active')) {
+        overlay.classList.remove('active');
+    }
+}
+
+function submitQrPasswordPrompt() {
+    const input = document.getElementById('qrPasswordInput');
+    const error = document.getElementById('qrPasswordError');
+    const entered = input ? input.value.trim() : '';
+
+    if (entered !== QR_LOAD_PASSWORD) {
+        if (error) error.hidden = false;
+        if (input) {
+            input.value = '';
+            input.focus();
+        }
+        return;
+    }
+
+    const payload = pendingQrPayload;
+    pendingQrPayload = null;
+    hideQrPasswordPrompt();
+    clearUrlParams();
+    applyQrPayload(payload);
+}
+
+function cancelQrPasswordPrompt() {
+    pendingQrPayload = null;
+    hideQrPasswordPrompt();
+    clearUrlParams();
+    showMessage('QRコードの読み込みをキャンセルしました', 'success');
+}
+
 // URLパラメータから値札データを読み込む
 function loadFromURL() {
     const urlParams = new URLSearchParams(window.location.search);
-    
+
     const serialNumber = urlParams.get('serial');
     const parsedSerial = serialNumber === null ? null : Number(serialNumber);
     const validSerial = Number.isSafeInteger(parsedSerial) && parsedSerial > 0
@@ -1609,65 +1767,26 @@ function loadFromURL() {
     const batteryCost = urlParams.get('price2');
     const beltCost = urlParams.get('price3');
     const desiredPrice = urlParams.get('price4');
-    
+
     // パラメータが存在する場合のみ読み込む
     if (serialNumber || modelNumber || category || operation ||
         purchasePrice || batteryCost || beltCost || desiredPrice) {
-        console.log('URLパラメータから値札データを読み込みます');
+        console.log('URLパラメータから値札データを読み込みます（パスワード確認待ち）');
 
-        // QRに連番がある場合は端末に保存し、このまま印刷した際にも同じ連番を使う。
-        // 既存のQRにはserialが無いため、その場合は現在の連番を変更しない
-        if (serialNumber) {
-            if (validSerial !== null) {
-                saveSerialNumber(validSerial);
-                updateSerialDisplay();
-            } else {
-                console.warn('QRコードの連番が不正なため読み込みません:', serialNumber);
-            }
-        }
-        
-        if (modelNumber) document.getElementById('modelNumber').value = modelNumber;
-        if (purchasePrice) document.getElementById('purchasePrice').value = purchasePrice;
-        if (batteryCost) document.getElementById('batteryCost').value = batteryCost;
-        if (beltCost) document.getElementById('beltCost').value = beltCost;
-        if (desiredPrice) document.getElementById('desiredPrice').value = desiredPrice;
-        
-        // カテゴリーの設定
-        if (category) {
-            const categorySelect = document.getElementById('categoryType');
-            const categoryOptions = Array.from(categorySelect.options).map(opt => opt.value);
-            
-            if (categoryOptions.includes(category)) {
-                categorySelect.value = category;
-            } else {
-                categorySelect.value = 'other';
-                document.getElementById('otherCategory').value = category;
-                document.getElementById('otherCategoryGroup').style.display = 'block';
-            }
-        }
-        
-        // 稼働方式の設定
-        if (operation) {
-            const operationSelect = document.getElementById('operationType');
-            const operationOptions = Array.from(operationSelect.options).map(opt => opt.value);
-            
-            if (operationOptions.includes(operation)) {
-                operationSelect.value = operation;
-            } else {
-                operationSelect.value = 'other';
-                document.getElementById('otherOperation').value = operation;
-                document.getElementById('otherOperationGroup').style.display = 'block';
-            }
-        }
-        
-        const loadedSerial = validSerial !== null
-            ? `（連番: ${String(validSerial).padStart(5, '0')}）`
-            : '';
-        showMessage('QRコードから値札データを読み込みました' + loadedSerial, 'success');
-        
-        // URLパラメータをクリアして、再読み込み時に再度読み込まれるのを防ぐ
-        const cleanURL = window.location.origin + window.location.pathname;
-        window.history.replaceState({}, document.title, cleanURL);
+        pendingQrPayload = {
+            serialNumber: serialNumber,
+            validSerial: validSerial,
+            modelNumber: modelNumber,
+            category: category,
+            operation: operation,
+            purchasePrice: purchasePrice,
+            batteryCost: batteryCost,
+            beltCost: beltCost,
+            desiredPrice: desiredPrice
+        };
+
+        // 認証前に値札内容を画面へ出さない。正しいパスワード入力後に反映する
+        showQrPasswordPrompt();
     }
 }
 

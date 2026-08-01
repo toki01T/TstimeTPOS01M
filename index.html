@@ -8,7 +8,7 @@
     <meta name="format-detection" content="telephone=no">
     <title>T's time - 値札印刷システム</title>
     <!-- 更新が端末のキャッシュに阻まれないよう、修正のたびにこの番号を上げる -->
-    <link rel="stylesheet" href="style.css?v=20260802g">
+    <link rel="stylesheet" href="style.css?v=20260802h">
 </head>
 <body>
     <div class="container">
@@ -84,6 +84,25 @@
                 </div>
                 <div class="history-list" id="historyList">
                     <!-- 履歴がここに動的に追加されます -->
+                </div>
+            </div>
+        </div>
+
+        <!-- QR読み取り時のパスワード確認 -->
+        <div class="password-modal" id="passwordModal" aria-hidden="true">
+            <div class="password-modal-content">
+                <div class="password-modal-header">
+                    <h3>パスワード入力</h3>
+                </div>
+                <div class="password-modal-body">
+                    <p class="password-modal-text">QRコードの値札データを開くにはパスワードが必要です</p>
+                    <label for="qrPasswordInput" class="password-label">パスワード</label>
+                    <input type="password" id="qrPasswordInput" inputmode="numeric" maxlength="8" autocomplete="off" placeholder="パスワードを入力">
+                    <p class="password-error" id="qrPasswordError" hidden>パスワードが違います</p>
+                    <div class="password-actions">
+                        <button type="button" id="qrPasswordCancel" class="password-button-secondary">キャンセル</button>
+                        <button type="button" id="qrPasswordSubmit" class="password-button">開く</button>
+                    </div>
                 </div>
             </div>
         </div>
@@ -206,6 +225,6 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
     <script src="epos-2.27.0.js" onerror="console.warn('ePOS SDK not loaded')"></script>
-    <script src="app.js?v=20260802g"></script>
+    <script src="app.js?v=20260802h"></script>
 </body>
 </html>
