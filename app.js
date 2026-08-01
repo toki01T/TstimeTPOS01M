@@ -49,7 +49,7 @@ function savePrinterSelection(printer) {
 
 function loadPrinterSelection() {
     const saved = localStorage.getItem('selectedPrinter');
-    return saved || 'printassist'; // デフォルトはPrint Assist
+    return saved || 'printassist'; // デフォルトはTM Print Assistant
 }
 
 function updatePrinterDisplay(printer) {
@@ -58,7 +58,7 @@ function updatePrinterDisplay(printer) {
     const mpB20Btn = document.getElementById('mpB20Option');
     const printerInfo = document.getElementById('printerInfo');
     const labels = {
-        printassist: 'Print Assist',
+        printassist: 'TM Print Assistant',
         tmassistant: 'TM Assistant',
         mpb20: 'MP-B20'
     };
@@ -77,7 +77,7 @@ function updatePrinterDisplay(printer) {
     }
 
     if (printerInfo) {
-        printerInfo.textContent = '現在: ' + (labels[printer] || 'Print Assist');
+        printerInfo.textContent = '現在: ' + (labels[printer] || 'TM Print Assistant');
     }
 }
 
@@ -100,7 +100,7 @@ document.addEventListener('DOMContentLoaded', function() {
     document.getElementById('printAssistOption').addEventListener('click', function() {
         savePrinterSelection('printassist');
         updatePrinterDisplay('printassist');
-        showMessage('プリンターをPrint Assistに設定しました', 'success');
+        showMessage('プリンターをTM Print Assistantに設定しました', 'success');
     });
     
     document.getElementById('tmAssistantOption').addEventListener('click', function() {
@@ -346,7 +346,7 @@ function printLabel() {
     }
     
     if (selectedPrinter === 'printassist') {
-        console.log('Print Assist印刷を使用');
+        console.log('TM Print Assistant印刷を使用');
         printWithPrintAssist(serialNumber, modelNumber, category, operation, purchasePrice, batteryCost, beltCost, desiredPrice);
     } else if (selectedPrinter === 'tmassistant') {
         console.log('TM Assistant印刷を使用');
@@ -552,20 +552,22 @@ function getPrintReturnUrl() {
     return window.location.origin + window.location.pathname;
 }
 
-// PrintAssist印刷（iPad/iPhone）
-function printWithPrintAssist(serialNumber, modelNumber, category, operation, purchasePrice, batteryCost, beltCost, desiredPrice) {
-    console.log('=== PrintAssist印刷開始 ===');
-    console.log('入力データ:', {serialNumber, modelNumber, category, operation, purchasePrice, batteryCost, beltCost, desiredPrice});
-    
-    // PrintAssistアプリの確認を促す
-    if (confirm('PrintAssistアプリで印刷します。\n\nPrintAssistがインストールされていますか？\n\n「OK」= インストール済み（印刷実行）\n「キャンセル」= 未インストール（App Storeへ移動）')) {
-        console.log('PrintAssist印刷を実行します');
-    } else {
-        // App Storeへ移動
-        window.location.href = 'https://apps.apple.com/jp/app/epson-tm-print-assistant/id1025534382';
-        showMessage('App StoreからPrintAssistをインストールしてください', 'error');
-        return;
+// 印刷前の確認。
+// キャンセルはApp Storeへ移動せず、入力内容を残したままこのアプリに留まる
+function confirmPrint(appName) {
+    const ok = confirm(`${appName}で印刷します。\n\n「OK」= 印刷する\n「キャンセル」= 印刷せずアプリに戻る`);
+    if (!ok) {
+        showMessage('印刷をキャンセルしました', 'success');
     }
+    return ok;
+}
+
+// Epson TM Print Assistant印刷（iPad/iPhone）
+function printWithPrintAssist(serialNumber, modelNumber, category, operation, purchasePrice, batteryCost, beltCost, desiredPrice) {
+    console.log('=== TM Print Assistant印刷開始 ===');
+    console.log('入力データ:', {serialNumber, modelNumber, category, operation, purchasePrice, batteryCost, beltCost, desiredPrice});
+
+    if (!confirmPrint('Epson TM Print Assistant')) return;
     
     try {
         const labelData = buildLabelPrintData(serialNumber, modelNumber, category, operation, purchasePrice, batteryCost, beltCost, desiredPrice);
@@ -579,14 +581,14 @@ function printWithPrintAssist(serialNumber, modelNumber, category, operation, pu
         console.log('生成されたXML:');
         console.log(xml);
         
-        // PrintAssist公式の方法：XMLを直接encodeURIComponentでエンコード
+        // TM Print Assistant公式の方法：XMLを直接encodeURIComponentでエンコード
         // Base64エンコードは不要！
         const encodedXML = encodeURIComponent(xml);
         console.log('URLエンコード完了');
         console.log('エンコード後の文字数:', encodedXML.length);
         console.log('エンコードデータ（最初の100文字）:', encodedXML.substring(0, 100));
         
-        // URLスキーム生成（PrintAssist公式フォーマット）
+        // URLスキーム生成（TM Print Assistant公式フォーマット）
         // tmprintassistant:// 形式を使用
         const returnUrl = getPrintReturnUrl();
         const successParam = returnUrl ? `success=${encodeURIComponent(returnUrl)}&` : '';
@@ -595,7 +597,7 @@ function printWithPrintAssist(serialNumber, modelNumber, category, operation, pu
         console.log('URLスキーム（最初の200文字）:', printURL.substring(0, 200));
         
         // デバッグ用：ユーザーに表示
-        showMessage(`印刷データを生成しました（XML: ${xml.length}文字）。PrintAssistを起動します...`, 'success');
+        showMessage(`印刷データを生成しました（XML: ${xml.length}文字）。TM Print Assistantを起動します...`, 'success');
         
         // 少し待ってからURLスキームを開く
         setTimeout(function() {
@@ -610,10 +612,10 @@ function printWithPrintAssist(serialNumber, modelNumber, category, operation, pu
             document.body.removeChild(link);
             console.log('URLスキーム起動完了');
             
-            showMessage('PrintAssistアプリに印刷データを送信しました', 'success');
+            showMessage('TM Print Assistantアプリに印刷データを送信しました', 'success');
         }, 500);
         
-        console.log('=== PrintAssist起動処理完了 ===');
+        console.log('=== TM Print Assistant起動処理完了 ===');
         
         // 履歴を保存
         saveToHistory(serialNumber, modelNumber, category, operation, purchasePrice, batteryCost, beltCost, desiredPrice);
@@ -627,7 +629,7 @@ function printWithPrintAssist(serialNumber, modelNumber, category, operation, pu
         showMessage('印刷データを送信しました。連番を ' + newSerial + ' に更新しました。', 'success');
         
     } catch (error) {
-        console.error('=== PrintAssist印刷エラー ===');
+        console.error('=== TM Print Assistant印刷エラー ===');
         console.error('エラー詳細:', error);
         console.error('エラーメッセージ:', error.message);
         console.error('エラースタック:', error.stack);
@@ -640,15 +642,7 @@ function printWithTMAssistant(serialNumber, modelNumber, category, operation, pu
     console.log('=== TM Assistant印刷開始 ===');
     console.log('入力データ:', {serialNumber, modelNumber, category, operation, purchasePrice, batteryCost, beltCost, desiredPrice});
     
-    // TM Assistantアプリの確認を促す
-    if (confirm('TM Assistantアプリで印刷します。\n\nTM Assistantがインストールされていますか？\n\n「OK」= インストール済み（印刷実行）\n「キャンセル」= 未インストール（App Storeへ移動）')) {
-        console.log('TM Assistant印刷を実行します');
-    } else {
-        // App Storeへ移動
-        window.location.href = 'https://apps.apple.com/jp/app/epson-tm-assistant/id1300223345';
-        showMessage('App StoreからTM Assistantをインストールしてください', 'error');
-        return;
-    }
+    if (!confirmPrint('TM Assistant')) return;
     
     try {
         const labelData = buildLabelPrintData(serialNumber, modelNumber, category, operation, purchasePrice, batteryCost, beltCost, desiredPrice);
@@ -718,11 +712,7 @@ function printWithTMAssistant(serialNumber, modelNumber, category, operation, pu
 async function printWithMPB20(serialNumber, modelNumber, category, operation, purchasePrice, batteryCost, beltCost, desiredPrice) {
     console.log('=== MP-B20印刷開始 ===');
 
-    if (!confirm('MP-B20で印刷します。\n\n「SII URL Print Agent」がインストールされていますか？\n\n「OK」= インストール済み（印刷実行）\n「キャンセル」= 未インストール（App Storeへ移動）')) {
-        window.location.href = 'https://apps.apple.com/jp/app/sii-url-print-agent/id1502527506';
-        showMessage('App StoreからSII URL Print Agentをインストールしてください', 'error');
-        return;
-    }
+    if (!confirmPrint('MP-B20（SII URL Print Agent）')) return;
 
     try {
         if (!window.jspdf || !window.jspdf.jsPDF) {
