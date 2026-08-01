@@ -456,14 +456,57 @@ function buildLabelPrintData(serialNumber, modelNumber, category, operation, pur
     };
 }
 
+// TM Print Assistant / TM Assistant用のラベルデータ。
+// プリンター内蔵フォントでは全角が半角の倍幅になるため、
+// 全角に揃えたMP-B20用データ（buildLabelPrintData）は流用できない。
+// 半角前提の当初のレイアウトをそのまま使う
+function buildEposLabelData(serialNumber, modelNumber, category, operation, purchasePrice, batteryCost, beltCost, desiredPrice) {
+    const now = new Date();
+    const dateString = `${now.getFullYear()}年${(now.getMonth()+1).toString().padStart(2,'0')}月${now.getDate().toString().padStart(2,'0')}日`;
+    const qrcodeNumber = `${now.getFullYear()}${(now.getMonth()+1).toString().padStart(2,'0')}${now.getDate().toString().padStart(2,'0')}${serialNumber.padStart(5, '0')}`;
+
+    const modelLines = modelNumber.includes('\n')
+        ? modelNumber.split('\n')
+        : splitText(modelNumber, 17);
+
+    const priceLines = [];
+    if (purchasePrice) {
+        const priceNum = Number(purchasePrice);
+        // 10万以上は1行に収まらないので見出しと金額を分ける
+        if (priceNum >= 100000) {
+            priceLines.push('購入価格');
+            priceLines.push(`${priceNum.toLocaleString()}円`);
+        } else {
+            priceLines.push(`購入価格${priceNum.toLocaleString()}円`);
+        }
+    }
+    if (batteryCost) priceLines.push(`電池代${Number(batteryCost).toLocaleString()}円`);
+    if (beltCost) priceLines.push(`ベルト代${Number(beltCost).toLocaleString()}円`);
+
+    return {
+        serialHalfWidth: serialNumber.padStart(5, '0'),
+        category: category || '',
+        modelLines: modelLines,
+        operation: operation || '',
+        priceLines: priceLines,
+        desiredLine: `${Number(desiredPrice).toLocaleString()}円`,
+        printNotice: document.getElementById('printNotice').checked,
+        dateString: dateString,
+        qrcodeNumber: qrcodeNumber,
+        dataURL: generateDataURL(modelNumber, category, operation, purchasePrice, batteryCost, beltCost, desiredPrice)
+    };
+}
+
 function buildEposPrintXml(labelData) {
     let xml = '<?xml version="1.0" encoding="utf-8"?>';
     xml += '<epos-print xmlns="http://www.epson-pos.com/schemas/2011/03/epos-print">';
     xml += '<text lang="ja"/>';
 
+    // 58mm用紙・width="2"で1行16文字。
+    // 「T's time」8文字＋スペース3＋連番5文字でちょうど1行に収まる
     xml += '<text width="2" height="1" em="true"/>';
     xml += '<text align="center"/>';
-    xml += `<text>${escapeXml(labelData.headerLine)}&#10;&#10;</text>`;
+    xml += `<text>T&apos;s time   ${labelData.serialHalfWidth}&#10;&#10;</text>`;
 
     xml += '<text width="1" height="1" em="false"/>';
     if (labelData.category) {
@@ -476,30 +519,24 @@ function buildEposPrintXml(labelData) {
     }
     xml += '<text>&#10;</text>';
 
-    for (let line of labelData.operationLines) {
-        xml += `<text>${escapeXml(line)}&#10;</text>`;
-    }
-    if (labelData.operationLines.length) {
-        xml += '<text>&#10;</text>';
+    if (labelData.operation) {
+        xml += `<text>${escapeXml(labelData.operation)}&#10;&#10;</text>`;
     }
 
     for (let line of labelData.priceLines) {
         xml += `<text>${escapeXml(line)}&#10;</text>`;
     }
 
-    if (labelData.priceLines.length) {
-        xml += '<text>&#10;</text>';
-    }
+    xml += '<text>&#10;</text>';
 
     xml += '<text width="2" height="2" em="true"/>';
-    xml += `<text>${escapeXml(labelData.desiredLine)}&#10;&#10;</text>`;
+    xml += `<text>${labelData.desiredLine}&#10;&#10;</text>`;
 
     if (labelData.printNotice) {
         xml += '<text width="1" height="1" em="false"/>';
-        for (let line of labelData.noticeLines) {
-            xml += `<text>${escapeXml(line)}&#10;</text>`;
-        }
-        xml += '<text>&#10;</text>';
+        xml += '<text>﹡大幅に金額が離れている場合は&#10;</text>';
+        xml += '<text>お売りする事が出来ません。&#10;</text>';
+        xml += '<text>ご了承下さい。&#10;&#10;</text>';
     }
 
     xml += '<text width="1" height="1" em="false"/>';
@@ -569,7 +606,7 @@ function printWithPrintAssist(serialNumber, modelNumber, category, operation, pu
     if (!confirmPrint('Epson TM Print Assistant')) return;
     
     try {
-        const labelData = buildLabelPrintData(serialNumber, modelNumber, category, operation, purchasePrice, batteryCost, beltCost, desiredPrice);
+        const labelData = buildEposLabelData(serialNumber, modelNumber, category, operation, purchasePrice, batteryCost, beltCost, desiredPrice);
 
         console.log('日時:', labelData.dateString);
         console.log('QRコード番号:', labelData.qrcodeNumber);
@@ -644,7 +681,7 @@ function printWithTMAssistant(serialNumber, modelNumber, category, operation, pu
     if (!confirmPrint('TM Assistant')) return;
     
     try {
-        const labelData = buildLabelPrintData(serialNumber, modelNumber, category, operation, purchasePrice, batteryCost, beltCost, desiredPrice);
+        const labelData = buildEposLabelData(serialNumber, modelNumber, category, operation, purchasePrice, batteryCost, beltCost, desiredPrice);
 
         console.log('日時:', labelData.dateString);
         console.log('QRコード番号:', labelData.qrcodeNumber);
