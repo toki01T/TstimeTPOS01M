@@ -213,7 +213,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
     modelNumberField.addEventListener('compositionend', function() {
         modelNumberComposing = false;
-        autoLineBreakSmart(this, MODEL_LINE_CHARS);
+        autoLineBreakSmart(this, PRINT_LINE_UNITS);
         autoGrowTextarea(this);
         updatePreview();
     });
@@ -225,7 +225,7 @@ document.addEventListener('DOMContentLoaded', function() {
             return;
         }
 
-        autoLineBreakSmart(this, MODEL_LINE_CHARS);
+        autoLineBreakSmart(this, PRINT_LINE_UNITS);
         autoGrowTextarea(this);
         updatePreview();
     });
@@ -241,7 +241,7 @@ document.addEventListener('DOMContentLoaded', function() {
     // 貼り付け時にも同じ幅で自動改行
     modelNumberField.addEventListener('paste', function(e) {
         setTimeout(() => {
-            autoLineBreakForPaste(this, MODEL_LINE_CHARS);
+            autoLineBreakForPaste(this, PRINT_LINE_UNITS);
             autoGrowTextarea(this);
             updatePreview();
         }, 10);
@@ -425,10 +425,11 @@ function setupBottomButtonReveal() {
 function buildLabelPrintData(serialNumber, modelNumber, category, operation, purchasePrice, batteryCost, beltCost, desiredPrice) {
     const now = new Date();
     const printNotice = document.getElementById('printNotice').checked;
-    const normalizedModelNumber = toFullWidth(modelNumber);
-    const modelLines = normalizedModelNumber.includes('\n')
-        ? normalizedModelNumber.split('\n')
-        : splitText(normalizedModelNumber, MODEL_LINE_CHARS);
+    // 型番は入力された表記のまま印字する。
+    // 数字だけを全角にすると「T２５００-SBGX２６３」のように英字と幅が揃わない
+    const modelLines = modelNumber.includes('\n')
+        ? modelNumber.split('\n')
+        : splitTextByWidth(modelNumber, PRINT_LINE_UNITS);
 
     const operationLines = operation ? splitOperationText(toFullWidth(operation)) : [];
 
@@ -465,9 +466,10 @@ function buildEposLabelData(serialNumber, modelNumber, category, operation, purc
     const dateString = `${now.getFullYear()}年${(now.getMonth()+1).toString().padStart(2,'0')}月${now.getDate().toString().padStart(2,'0')}日`;
     const qrcodeNumber = `${now.getFullYear()}${(now.getMonth()+1).toString().padStart(2,'0')}${now.getDate().toString().padStart(2,'0')}${serialNumber.padStart(5, '0')}`;
 
+    // width="1"の1行は半角32文字分。文字数で切ると全角の型番が用紙幅を超える
     const modelLines = modelNumber.includes('\n')
         ? modelNumber.split('\n')
-        : splitText(modelNumber, 17);
+        : splitTextByWidth(modelNumber, PRINT_LINE_UNITS);
 
     const priceLines = [];
     if (purchasePrice) {
@@ -1153,21 +1155,11 @@ function escapeXml(str) {
               .replace(/'/g, '&apos;');
 }
 
-// テキストを指定文字数で分割
-function splitText(text, maxLength) {
-    if (!text) return [''];
-    const lines = [];
-    for (let i = 0; i < text.length; i += maxLength) {
-        lines.push(text.substring(i, i + maxLength));
-    }
-    return lines;
-}
-
 // 半角を1、全角を2として行の幅を数える（58mm用紙は1行あたり半角32文字）
 const PRINT_LINE_UNITS = 32;
 
-// 型番の自動改行は全角16文字。58mm用紙に収まる幅がそのまま上限になる
-// （以前は17文字で折り返していたため、印字幅を全角1文字ぶん超えていた）
+// 入力欄の字送りを詰める際の基準。全角が最も広いので、
+// 全角16文字（=半角32文字分）が収まれば他の組み合わせも収まる
 const MODEL_LINE_CHARS = PRINT_LINE_UNITS / 2;
 
 function textWidthUnits(text) {
@@ -1178,6 +1170,30 @@ function textWidthUnits(text) {
         units += halfWidth ? 1 : 2;
     }
     return units;
+}
+
+// 印字幅で折り返す。文字数で数えると、半角だけの型番が行の半分で改行され、
+// 全角混在の型番は逆に用紙幅を超えてしまう
+function splitTextByWidth(text, maxUnits) {
+    if (!text) return [''];
+
+    const lines = [];
+    let line = '';
+    let units = 0;
+
+    for (const ch of text) {
+        const chUnits = textWidthUnits(ch);
+        if (units + chUnits > maxUnits && line !== '') {
+            lines.push(line);
+            line = '';
+            units = 0;
+        }
+        line += ch;
+        units += chUnits;
+    }
+    lines.push(line);
+
+    return lines;
 }
 
 // 稼働方式は「稼働」「未稼働」の括弧の前で折り返す。
@@ -1195,7 +1211,7 @@ function splitOperationText(text) {
         }
     }
 
-    return splitText(text, MODEL_LINE_CHARS);
+    return splitTextByWidth(text, PRINT_LINE_UNITS);
 }
 
 // テキストエリアの自動改行処理
@@ -1217,27 +1233,20 @@ function autoLineBreak(textarea, maxCharsPerLine) {
 }
 
 // 貼り付け時の自動改行処理（手動改行を保持しながら超過行を分割）
-function autoLineBreakForPaste(textarea, maxCharsPerLine) {
-    const lines = textarea.value.split('\n');
-    let formatted = [];
-    
-    for (let line of lines) {
-        if (line.length > maxCharsPerLine) {
-            for (let i = 0; i < line.length; i += maxCharsPerLine) {
-                formatted.push(line.substring(i, i + maxCharsPerLine));
-            }
-        } else {
-            formatted.push(line);
-        }
-    }
-    
+function autoLineBreakForPaste(textarea, maxUnitsPerLine) {
+    const formatted = textarea.value.split('\n').flatMap(function(line) {
+        return textWidthUnits(line) > maxUnitsPerLine
+            ? splitTextByWidth(line, maxUnitsPerLine)
+            : [line];
+    });
+
     textarea.value = formatted.join('\n');
 }
 
-// 手動改行を残したまま指定文字数で折り返し、カーソルの移動先も同時に求める。
+// 手動改行を残したまま印字幅で折り返し、カーソルの移動先も同時に求める。
 // 折り返しの前後で文字の並びは変わらないので、元の文字を1つずつ書き写しながら
 // カーソルが何文字目にあったかを追いかければ、挿入した改行の分だけ正確にずれる
-function wrapWithCursor(value, maxCharsPerLine, cursorPos) {
+function wrapWithCursor(value, maxUnitsPerLine, cursorPos) {
     const lines = value.split('\n');
     let out = '';
     let readCount = 0;
@@ -1250,21 +1259,27 @@ function wrapWithCursor(value, maxCharsPerLine, cursorPos) {
             readCount++;
         }
 
-        const line = lines[i];
-        for (let j = 0; j < line.length; j++) {
-            if (j > 0 && j % maxCharsPerLine === 0) out += '\n';
+        let units = 0;
+        // サロゲートペアを壊さないよう、コードポイント単位で走査する
+        for (const ch of lines[i]) {
+            const chUnits = textWidthUnits(ch);
+            if (units > 0 && units + chUnits > maxUnitsPerLine) {
+                out += '\n';
+                units = 0;
+            }
             if (readCount === cursorPos && cursor === null) cursor = out.length;
-            out += line[j];
-            readCount++;
+            out += ch;
+            units += chUnits;
+            readCount += ch.length;
         }
     }
 
     return { value: out, cursor: cursor === null ? out.length : cursor };
 }
 
-// スマートな自動改行（手動改行を保持しつつ、超過分を自動分割）
-function autoLineBreakSmart(textarea, maxCharsPerLine) {
-    const wrapped = wrapWithCursor(textarea.value, maxCharsPerLine, textarea.selectionStart);
+// スマートな自動改行（手動改行を保持しつつ、印字幅の超過分を自動分割）
+function autoLineBreakSmart(textarea, maxUnitsPerLine) {
+    const wrapped = wrapWithCursor(textarea.value, maxUnitsPerLine, textarea.selectionStart);
     if (wrapped.value === textarea.value) return;
 
     textarea.value = wrapped.value;
