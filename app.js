@@ -49,7 +49,35 @@ function savePrinterSelection(printer) {
 
 function loadPrinterSelection() {
     const saved = localStorage.getItem('selectedPrinter');
-    return saved || 'printassist'; // デフォルトはTM Print Assistant
+    return normalizePrinterId(saved) || 'printassist';
+}
+
+function normalizePrinterId(printer) {
+    if (printer === 'printassist' || printer === 'tmassistant' || printer === 'mpb20') {
+        return printer;
+    }
+    return null;
+}
+
+function applyPrinterSelection(printer, options) {
+    const normalized = normalizePrinterId(printer);
+    if (!normalized) return false;
+
+    savePrinterSelection(normalized);
+    updatePrinterDisplay(normalized);
+    if (normalized === 'mpb20') {
+        preloadMpb20FontIfSelected();
+    }
+
+    if (options && options.notify) {
+        const labels = {
+            printassist: 'TM Print Assistant',
+            tmassistant: 'TM Assistant',
+            mpb20: 'MP-B20'
+        };
+        showMessage('プリンターを' + labels[normalized] + 'に設定しました', 'success');
+    }
+    return true;
 }
 
 function updatePrinterDisplay(printer) {
@@ -98,22 +126,15 @@ document.addEventListener('DOMContentLoaded', function() {
     
     // プリンター選択ボタン
     document.getElementById('printAssistOption').addEventListener('click', function() {
-        savePrinterSelection('printassist');
-        updatePrinterDisplay('printassist');
-        showMessage('プリンターをTM Print Assistantに設定しました', 'success');
+        applyPrinterSelection('printassist', { notify: true });
     });
     
     document.getElementById('tmAssistantOption').addEventListener('click', function() {
-        savePrinterSelection('tmassistant');
-        updatePrinterDisplay('tmassistant');
-        showMessage('プリンターをTM Assistantに設定しました', 'success');
+        applyPrinterSelection('tmassistant', { notify: true });
     });
 
     document.getElementById('mpB20Option').addEventListener('click', function() {
-        savePrinterSelection('mpb20');
-        updatePrinterDisplay('mpb20');
-        showMessage('プリンターをMP-B20に設定しました', 'success');
-        preloadMpb20FontIfSelected();
+        applyPrinterSelection('mpb20', { notify: true });
     });
     
     // ハンバーガーメニューの設定
@@ -1694,7 +1715,8 @@ function packedToPendingPayload(packed) {
         purchasePrice: packed.p1 != null ? String(packed.p1) : null,
         batteryCost: packed.p2 != null ? String(packed.p2) : null,
         beltCost: packed.p3 != null ? String(packed.p3) : null,
-        desiredPrice: packed.p4 != null ? String(packed.p4) : null
+        desiredPrice: packed.p4 != null ? String(packed.p4) : null,
+        printer: packed.pr != null ? String(packed.pr) : null
     };
 }
 
@@ -1709,6 +1731,7 @@ let qrPasswordFailCount = 0;
 function generateDataURL(modelNumber, category, operation, purchasePrice, batteryCost, beltCost, desiredPrice, serialNumber) {
     const baseURL = window.location.origin + window.location.pathname;
     const payload = {};
+    const printer = loadPrinterSelection();
 
     if (serialNumber) payload.s = String(serialNumber);
     if (modelNumber) payload.m = modelNumber;
@@ -1718,6 +1741,7 @@ function generateDataURL(modelNumber, category, operation, purchasePrice, batter
     if (batteryCost) payload.p2 = batteryCost;
     if (beltCost) payload.p3 = beltCost;
     if (desiredPrice) payload.p4 = desiredPrice;
+    if (printer) payload.pr = printer;
 
     return baseURL + '?d=' + encryptLabelPayload(payload, QR_LOAD_PASSWORD);
 }
@@ -1775,6 +1799,11 @@ function applyQrPayload(payload) {
             document.getElementById('otherOperation').value = payload.operation;
             document.getElementById('otherOperationGroup').style.display = 'block';
         }
+    }
+
+    // QRに記録された印刷時のプリンターへ戻す
+    if (payload.printer) {
+        applyPrinterSelection(payload.printer);
     }
 
     const modelNumberField = document.getElementById('modelNumber');
@@ -1994,7 +2023,8 @@ function saveToHistory(serialNumber, modelNumber, category, operation, purchaseP
             purchasePrice: purchasePrice || '',
             batteryCost: batteryCost || '',
             beltCost: beltCost || '',
-            desiredPrice: desiredPrice
+            desiredPrice: desiredPrice,
+            printer: loadPrinterSelection()
         };
         
         // 最新の履歴を先頭に追加
@@ -2269,6 +2299,11 @@ function loadFromHistory(item) {
             document.getElementById('otherOperation').value = item.operation;
             document.getElementById('otherOperationGroup').style.display = 'block';
         }
+    }
+
+    // 印刷時のプリンターがあれば復元する
+    if (item.printer) {
+        applyPrinterSelection(item.printer);
     }
     
     updatePreview();
