@@ -2102,9 +2102,6 @@ function renderHistoryList(historyList) {
         wrapper.className = 'history-item-wrapper';
         wrapper.dataset.index = String(index);
 
-        const container = document.createElement('div');
-        container.className = 'history-item-container';
-
         const historyItem = document.createElement('div');
         historyItem.className = 'history-item';
 
@@ -2124,13 +2121,18 @@ function renderHistoryList(historyList) {
             </div>
         `;
 
-        const deleteButton = document.createElement('div');
+        const actions = document.createElement('div');
+        actions.className = 'history-item-actions';
+
+        const deleteButton = document.createElement('button');
+        deleteButton.type = 'button';
         deleteButton.className = 'delete-button';
         deleteButton.textContent = '削除';
+        deleteButton.setAttribute('aria-label', 'この履歴を削除');
 
-        container.appendChild(historyItem);
-        wrapper.appendChild(container);
-        wrapper.appendChild(deleteButton);
+        actions.appendChild(deleteButton);
+        historyItem.appendChild(actions);
+        wrapper.appendChild(historyItem);
         fragment.appendChild(wrapper);
     });
 
@@ -2146,81 +2148,22 @@ function setupHistoryEventDelegation(historyList) {
     if (historyDelegationBound || !historyList) return;
     historyDelegationBound = true;
 
-    let startX = 0;
-    let startY = 0;
-    let currentX = 0;
-    let currentY = 0;
-    let isDragging = false;
-    let isHorizontalSwipe = null;
-    let activeItem = null;
-    let activeContainer = null;
-
-    historyList.addEventListener('touchstart', function(e) {
-        const historyItem = e.target.closest('.history-item');
-        if (!historyItem) return;
-
-        activeItem = historyItem;
-        activeContainer = historyItem.closest('.history-item-container');
-        startX = e.touches[0].clientX;
-        startY = e.touches[0].clientY;
-        currentX = startX;
-        currentY = startY;
-        isDragging = true;
-        isHorizontalSwipe = null;
-        historyItem.classList.add('swiping');
-    }, {passive: true});
-
-    historyList.addEventListener('touchmove', function(e) {
-        if (!isDragging || !activeContainer) return;
-
-        currentX = e.touches[0].clientX;
-        currentY = e.touches[0].clientY;
-        const deltaX = currentX - startX;
-        const deltaY = currentY - startY;
-
-        if (isHorizontalSwipe === null) {
-            isHorizontalSwipe = Math.abs(deltaX) > Math.abs(deltaY);
-        }
-
-        if (isHorizontalSwipe) {
-            if (deltaX < 0) {
-                e.preventDefault();
-                const moveX = Math.max(deltaX, -80);
-                activeContainer.style.transform = `translateX(${moveX}px)`;
-            }
-        }
-    });
-
-    historyList.addEventListener('touchend', function() {
-        if (!isDragging || !activeItem || !activeContainer) return;
-        isDragging = false;
-        activeItem.classList.remove('swiping');
-
-        const deltaX = currentX - startX;
-
-        if (isHorizontalSwipe && deltaX < -40) {
-            activeContainer.style.transform = 'translateX(-80px)';
-        } else if (isHorizontalSwipe) {
-            activeContainer.style.transform = 'translateX(0)';
-        }
-
-        activeItem = null;
-        activeContainer = null;
-        isHorizontalSwipe = null;
-    }, {passive: true});
-
     historyList.addEventListener('click', function(e) {
-        if (e.target.classList.contains('delete-button')) {
-            // confirm中に同じクリックが多重発火してもダイアログを重ねない
+        const deleteButton = e.target.closest('.delete-button');
+        if (deleteButton) {
+            e.preventDefault();
+            e.stopPropagation();
+
+            // confirm中の多重発火や、削除直後の再クリックを防ぐ
             if (historyDeleteConfirmOpen) return;
 
-            const wrapper = e.target.closest('.history-item-wrapper');
+            const wrapper = deleteButton.closest('.history-item-wrapper');
             if (!wrapper) return;
             const index = parseInt(wrapper.dataset.index, 10);
             if (!Number.isInteger(index) || index < 0) return;
 
             historyDeleteConfirmOpen = true;
-            const confirmed = confirm('この履歴を削除しますか？');
+            const confirmed = window.confirm('この履歴を削除しますか？');
             historyDeleteConfirmOpen = false;
 
             if (confirmed) {
@@ -2231,22 +2174,16 @@ function setupHistoryEventDelegation(historyList) {
         }
 
         const historyItem = e.target.closest('.history-item');
-        if (historyItem) {
-            const container = historyItem.closest('.history-item-container');
-            if (container && container.style.transform && container.style.transform !== 'translateX(0px)' && container.style.transform !== 'translateX(0)') {
-                container.style.transform = 'translateX(0)';
-                return;
-            }
+        if (!historyItem) return;
 
-            const wrapper = historyItem.closest('.history-item-wrapper');
-            if (!wrapper) return;
-            const index = parseInt(wrapper.dataset.index, 10);
-            const history = getHistory();
-            if (!Number.isInteger(index) || !history[index]) return;
+        const wrapper = historyItem.closest('.history-item-wrapper');
+        if (!wrapper) return;
+        const index = parseInt(wrapper.dataset.index, 10);
+        const history = getHistory();
+        if (!Number.isInteger(index) || !history[index]) return;
 
-            loadFromHistory(history[index]);
-            closeHistoryModal();
-        }
+        loadFromHistory(history[index]);
+        closeHistoryModal();
     });
 }
 

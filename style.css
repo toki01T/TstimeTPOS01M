@@ -798,17 +798,10 @@ body.qr-locked .container > *:not(.overlay):not(.password-modal) {
 .history-item-wrapper {
     position: relative;
     margin-bottom: 12px;
-    overflow: hidden;
-}
-
-.history-item-container {
-    position: relative;
-    transition: transform 0.3s ease;
 }
 
 .history-item {
     position: relative;
-    z-index: 1;
     padding: 20px;
     border: 1px solid var(--border);
     border-radius: 18px;
@@ -817,28 +810,39 @@ body.qr-locked .container > *:not(.overlay):not(.password-modal) {
     transition: transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease;
 }
 
-.history-item.swiping {
-    cursor: grab;
-}
-
 .history-item:hover {
     transform: translateY(-1px);
     border-color: var(--border-strong);
     box-shadow: 0 14px 24px rgba(15, 23, 42, 0.08);
 }
 
-.delete-button {
-    position: absolute;
-    inset: 0 0 0 auto;
-    width: 80px;
+.history-item-actions {
     display: flex;
-    align-items: center;
-    justify-content: center;
+    justify-content: flex-end;
+    margin-top: 14px;
+    padding-top: 12px;
+    border-top: 1px solid var(--border);
+}
+
+.delete-button {
+    appearance: none;
+    -webkit-appearance: none;
+    border: none;
+    min-width: 72px;
+    min-height: 40px;
+    padding: 8px 16px;
+    border-radius: 12px;
     background: #ef4444;
     color: #fff;
     font-size: 0.88rem;
     font-weight: 700;
-    border-radius: 0 18px 18px 0;
+    line-height: 1;
+    cursor: pointer;
+    touch-action: manipulation;
+}
+
+.delete-button:active {
+    background: #dc2626;
 }
 
 .history-item-header {
