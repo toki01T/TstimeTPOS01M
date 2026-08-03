@@ -932,11 +932,16 @@ function createPrintableQRCode(text, maxSizePx) {
 function drawCenteredLine(ctx, text, centerX, y) {
     ctx.textAlign = 'center';
     ctx.textBaseline = 'top';
+    // サブピクセル配置だと二値化後に輪郭ががたつくので整数座標へ揃える
+    if ('textRendering' in ctx) {
+        ctx.textRendering = 'geometricPrecision';
+    }
     ctx.fillText(text, Math.round(centerX), Math.round(y));
 }
 
 function applyMpb20Font(ctx, fontFamily, size, weight) {
-    ctx.font = `${weight} ${size}px ${fontFamily}`;
+    // サイズも整数化して、拡大描画時の画線がドット境界に乗りやすくする
+    ctx.font = `${weight} ${Math.round(size)}px ${fontFamily}`;
 }
 
 // 拡大して描いた帯を印字ドットへ落とす。
@@ -987,9 +992,12 @@ function drawFittedLine(ctx, text, centerX, y, maxWidth, fontFamily, size, weigh
 // 外部CDNではなく同梱した公式TTFを固有名で登録する。
 // 固有名にすることで、読み込み失敗時に端末内の別フォントへ黙って置き換わるのを防ぐ
 const MPB20_FONT_NAME = 'TstimeBIZUDGothic';
+const MPB20_FONT_REGULAR_NAME = 'TstimeBIZUDGothicRegular';
 const MPB20_FONT_FAMILY = `"${MPB20_FONT_NAME}"`;
+const MPB20_FONT_REGULAR_FAMILY = `"${MPB20_FONT_REGULAR_NAME}"`;
 let mpb20FontLoadPromise = null;
 let mpb20FontFace = null;
+let mpb20RegularFontFace = null;
 
 // 「T❜s time」の行だけは見た目を変えたくないので、従来のフォントで描く
 const MPB20_HEADER_FONT_FAMILY = '"Hiragino Sans", "Hiragino Kaku Gothic ProN", "Yu Gothic", sans-serif';
@@ -1004,38 +1012,48 @@ function preloadMpb20FontIfSelected() {
     });
 }
 
+function isMpb20FontFaceReady(face) {
+    return !!(face && face.status === 'loaded' && document.fonts.has(face));
+}
+
 async function ensurePrintFontReady() {
     if (!document.fonts || typeof FontFace === 'undefined') {
         throw new Error('この端末では印字フォントを読み込めません');
     }
 
-    if (mpb20FontFace &&
-        mpb20FontFace.status === 'loaded' &&
-        document.fonts.has(mpb20FontFace)) {
+    if (isMpb20FontFaceReady(mpb20FontFace) && isMpb20FontFaceReady(mpb20RegularFontFace)) {
         return;
     }
 
     if (!mpb20FontLoadPromise) {
         mpb20FontLoadPromise = (async function() {
-            const fontUrl = new URL('fonts/BIZUDGothic-Bold.ttf', document.baseURI).href;
+            const boldUrl = new URL('fonts/BIZUDGothic-Bold.ttf', document.baseURI).href;
+            const regularUrl = new URL('fonts/BIZUDGothic-Regular.ttf', document.baseURI).href;
+
             mpb20FontFace = new FontFace(
                 MPB20_FONT_NAME,
-                `url("${fontUrl}") format("truetype")`,
+                `url("${boldUrl}") format("truetype")`,
                 { style: 'normal', weight: '700' }
             );
+            mpb20RegularFontFace = new FontFace(
+                MPB20_FONT_REGULAR_NAME,
+                `url("${regularUrl}") format("truetype")`,
+                { style: 'normal', weight: '400' }
+            );
 
-            await mpb20FontFace.load();
+            await Promise.all([mpb20FontFace.load(), mpb20RegularFontFace.load()]);
             document.fonts.add(mpb20FontFace);
+            document.fonts.add(mpb20RegularFontFace);
             await document.fonts.ready;
 
-            if (mpb20FontFace.status !== 'loaded' ||
-                !document.fonts.has(mpb20FontFace)) {
+            if (!isMpb20FontFaceReady(mpb20FontFace) || !isMpb20FontFaceReady(mpb20RegularFontFace)) {
                 throw new Error('BIZ UDゴシックの読み込みを確認できませんでした');
             }
         })().catch(function(error) {
             // 一時的な通信・キャッシュ不良なら印刷ボタン押下時に再試行できるようにする
             mpb20FontLoadPromise = null;
             mpb20FontFace = null;
+            mpb20RegularFontFace = null;
             throw error;
         });
     }
@@ -1143,14 +1161,15 @@ async function createMPB20LabelPdf(labelData) {
 
         if (labelData.printNotice) {
             labelData.noticeLines.forEach(function(line) {
-                // 同梱フォントはBoldのみのため、注意文は通常太さの端末フォントで描く
+                // 端末フォントの細線は二値化でがたつくため、
+                // 印字用のBIZ UD Regular（通常太さ）でドットに落としやすくする
                 drawFittedLine(
                     ctx,
                     line,
                     centerX,
-                    y,
+                    Math.round(y),
                     contentWidthPx,
-                    MPB20_HEADER_FONT_FAMILY,
+                    MPB20_FONT_REGULAR_FAMILY,
                     fonts.notice.size,
                     'normal'
                 );
