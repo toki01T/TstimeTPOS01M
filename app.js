@@ -579,8 +579,8 @@ function buildEposPrintXml(labelData) {
     xml += `<text>${labelData.desiredLine}&#10;&#10;</text>`;
 
     if (labelData.printNotice) {
-        // 注意文は少し大きく（横幅はそのまま、高さを一段上げる）
-        xml += '<text width="1" height="2" em="false"/>';
+        // 倍角高さはサーマルでがたつきやすいので、通常サイズの太字にする
+        xml += '<text width="1" height="1" em="true"/>';
         xml += '<text>﹡大幅に金額が離れている場合は&#10;</text>';
         xml += '<text>お売りする事が出来ません。&#10;</text>';
         xml += '<text>ご了承下さい。&#10;&#10;</text>';
@@ -590,7 +590,8 @@ function buildEposPrintXml(labelData) {
     xml += `<text>${escapeXml(labelData.dateString)}&#10;</text>`;
     // 日付と点線の間に約2mm空ける（203dpi換算で16ドット）
     xml += '<feed unit="16"/>';
-    xml += '<text>- - - - - - - - - - - - - - - -&#10;&#10;</text>';
+    // 隙間の少ない点線にして濃く見せる
+    xml += '<text>・・・・・・・・・・・・・・・・&#10;&#10;</text>';
 
     xml += `<symbol type="qrcode_model_2" level="h" width="3" height="0" size="0">${escapeXml(labelData.dataURL)}</symbol>`;
     xml += `<text>&#10;${labelData.qrcodeNumber}&#10;</text>`;
@@ -982,6 +983,28 @@ function drawFittedLine(ctx, text, centerX, y, maxWidth, fontFamily, size, weigh
     drawCenteredLine(ctx, text, centerX, y);
 }
 
+// 注意文など細線が消えやすい行は、輪郭を少し足してから塗る
+function drawStableFittedLine(ctx, text, centerX, y, maxWidth, fontFamily, size, weight) {
+    let fontSize = size;
+    applyMpb20Font(ctx, fontFamily, fontSize, weight);
+    while (fontSize > 12 && ctx.measureText(text).width > maxWidth) {
+        fontSize -= 1;
+        applyMpb20Font(ctx, fontFamily, fontSize, weight);
+    }
+
+    const x = Math.round(centerX);
+    const yy = Math.round(y);
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'top';
+    ctx.fillStyle = '#000';
+    ctx.strokeStyle = '#000';
+    ctx.lineWidth = 1.4;
+    ctx.lineJoin = 'round';
+    ctx.miterLimit = 2;
+    ctx.strokeText(text, x, yy);
+    ctx.fillText(text, x, yy);
+}
+
 // 外部CDNではなく同梱した公式TTFを固有名で登録する。
 // 固有名にすることで、読み込み失敗時に端末内の別フォントへ黙って置き換わるのを防ぐ
 const MPB20_FONT_NAME = 'TstimeBIZUDGothic';
@@ -1086,7 +1109,7 @@ async function createMPB20LabelPdf(labelData) {
     if (labelData.printNotice) yEstimate += labelData.noticeLines.length * fonts.notice.line + 14;
     // 日付の下に2mm空けてから点線、その後QR
     const dateToDotGapPx = 2 * pxPerMm;
-    const dottedBlockPx = 12;
+    const dottedBlockPx = 16;
     yEstimate += fonts.footer.line + dateToDotGapPx + dottedBlockPx + qrSize + 10 + fonts.footer.line + paddingBottom;
 
     const finalHeight = Math.ceil(yEstimate);
@@ -1094,11 +1117,13 @@ async function createMPB20LabelPdf(labelData) {
     const drawDottedSeparator = function(ctx, cx, lineY, width) {
         const left = Math.round(cx - width / 2);
         const yPos = Math.round(lineY);
-        const dot = 3;
-        const gap = 4;
+        // サーマルで薄くならないよう、点を太く・隙間を狭くする
+        const dot = 7;
+        const gap = 3;
+        const thickness = 5;
         ctx.fillStyle = '#000';
         for (let x = left; x + dot <= left + width; x += dot + gap) {
-            ctx.fillRect(x, yPos, dot, 2);
+            ctx.fillRect(Math.round(x), yPos, dot, thickness);
         }
     };
 
@@ -1140,7 +1165,7 @@ async function createMPB20LabelPdf(labelData) {
 
         if (labelData.printNotice) {
             labelData.noticeLines.forEach(function(line) {
-                drawFittedLine(ctx, line, centerX, y, contentWidthPx, fontFamily, fonts.notice.size, fonts.notice.weight);
+                drawStableFittedLine(ctx, line, centerX, y, contentWidthPx, fontFamily, fonts.notice.size, fonts.notice.weight);
                 y += fonts.notice.line;
             });
             y += 14;
