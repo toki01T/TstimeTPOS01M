@@ -588,6 +588,8 @@ function buildEposPrintXml(labelData) {
 
     xml += '<text width="1" height="1" em="false"/>';
     xml += `<text>${escapeXml(labelData.dateString)}&#10;</text>`;
+    // 日付と点線の間に約2mm空ける（203dpi換算で16ドット）
+    xml += '<feed unit="16"/>';
     xml += '<text>- - - - - - - - - - - - - - - -&#10;&#10;</text>';
 
     xml += `<symbol type="qrcode_model_2" level="h" width="3" height="0" size="0">${escapeXml(labelData.dataURL)}</symbol>`;
@@ -1082,7 +1084,10 @@ async function createMPB20LabelPdf(labelData) {
     if (labelData.priceLines.length) yEstimate += 14;
     yEstimate += fonts.desired.line;
     if (labelData.printNotice) yEstimate += labelData.noticeLines.length * fonts.notice.line + 14;
-    yEstimate += fonts.footer.line + 16 + qrSize + 10 + fonts.footer.line + paddingBottom;
+    // 日付の下に2mm空けてから点線、その後QR
+    const dateToDotGapPx = 2 * pxPerMm;
+    const dottedBlockPx = 12;
+    yEstimate += fonts.footer.line + dateToDotGapPx + dottedBlockPx + qrSize + 10 + fonts.footer.line + paddingBottom;
 
     const finalHeight = Math.ceil(yEstimate);
 
@@ -1144,9 +1149,10 @@ async function createMPB20LabelPdf(labelData) {
         drawFittedLine(ctx, labelData.dateString, centerX, y, contentWidthPx, fontFamily, fonts.footer.size, fonts.footer.weight);
         y += fonts.footer.line;
 
-        // 日付とQRコードの間の点線
-        drawDottedSeparator(ctx, centerX, y + 4, contentWidthPx);
-        y += 16;
+        // 日付と点線の間に2mm空ける
+        y += dateToDotGapPx;
+        drawDottedSeparator(ctx, centerX, y, contentWidthPx);
+        y += dottedBlockPx;
 
         // 補間するとセルの境界がドット境界からずれるため、拡大は等倍コピーで行う
         ctx.imageSmoothingEnabled = false;
