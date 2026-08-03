@@ -62,7 +62,7 @@ body {
 .page-header {
     position: relative;
     display: flex;
-    align-items: flex-start;
+    align-items: center;
     justify-content: center;
     margin-bottom: 28px;
     padding: 6px 72px 28px;
@@ -84,7 +84,7 @@ body {
 }
 
 .page-header h1 {
-    margin-bottom: 10px;
+    margin-bottom: 0;
     font-size: clamp(2.1rem, 4vw, 3.4rem);
     font-weight: 800;
     letter-spacing: -0.03em;
@@ -99,7 +99,7 @@ body {
 
 .hamburger-menu {
     position: absolute;
-    top: 0;
+    top: 50%;
     right: 0;
     width: 52px;
     height: 52px;
@@ -114,11 +114,12 @@ body {
     align-items: center;
     gap: 6px;
     box-shadow: 0 12px 24px rgba(15, 23, 42, 0.08);
+    transform: translateY(-50%);
     transition: transform 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease;
 }
 
 .hamburger-menu:hover {
-    transform: translateY(-1px);
+    transform: translateY(calc(-50% - 1px));
     border-color: var(--border-strong);
     box-shadow: 0 16px 28px rgba(37, 99, 235, 0.14);
 }
@@ -931,12 +932,13 @@ body.qr-locked .container > *:not(.overlay):not(.password-modal) {
     }
 
     .page-header {
-        padding: 56px 0 18px;
+        /* タイトルとハンバーガーを同じ高さに並べる */
+        padding: 8px 56px 18px;
         margin-bottom: 18px;
     }
 
     .hamburger-menu {
-        top: 0;
+        top: 50%;
         right: 0;
         width: 48px;
         height: 48px;
