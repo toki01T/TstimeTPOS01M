@@ -1091,7 +1091,7 @@ async function createMPB20LabelPdf(labelData) {
         body: { size: 26, weight: 'bold', line: 34 },
         price: { size: 24, weight: 'bold', line: 32 },
         desired: { size: 50, weight: 'bold', line: 58 },
-        notice: { size: 26, weight: 'bold', line: 34 },
+        notice: { size: 28, weight: 'normal', line: 36 },
         footer: { size: 24, weight: 'normal', line: 30 }
     };
 
@@ -1161,15 +1161,15 @@ async function createMPB20LabelPdf(labelData) {
 
         if (labelData.printNotice) {
             labelData.noticeLines.forEach(function(line) {
-                // 縁取りすると「承」など画数の多い字の中が埋まるため、
-                // 本文と同じ通常描画（Bold・縁取りなし）にする
+                // 「承」など画数の多い字はBoldや縁取りだと隙間が埋まって潰れる。
+                // 印字用Regularを少し大きめにし、縁取りなしで隙間を残す
                 drawFittedLine(
                     ctx,
                     line,
                     centerX,
                     Math.round(y),
                     contentWidthPx,
-                    MPB20_FONT_FAMILY,
+                    MPB20_FONT_REGULAR_FAMILY,
                     fonts.notice.size,
                     fonts.notice.weight
                 );
