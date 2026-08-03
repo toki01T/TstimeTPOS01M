@@ -939,33 +939,6 @@ function drawCenteredLine(ctx, text, centerX, y) {
     ctx.fillText(text, Math.round(centerX), Math.round(y));
 }
 
-// 濁点（ご・ざ 等）の細い部品が二値化で欠けないよう、
-// ごく薄い縁取りのあと塗りつぶして輪郭を安定させる
-function drawStablePrintLine(ctx, text, centerX, y, maxWidth, fontFamily, size, weight) {
-    let fontSize = size;
-    applyMpb20Font(ctx, fontFamily, fontSize, weight);
-    while (fontSize > 12 && ctx.measureText(text).width > maxWidth) {
-        fontSize -= 1;
-        applyMpb20Font(ctx, fontFamily, fontSize, weight);
-    }
-
-    const x = Math.round(centerX);
-    const yy = Math.round(y);
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'top';
-    if ('textRendering' in ctx) {
-        ctx.textRendering = 'geometricPrecision';
-    }
-    ctx.lineJoin = 'round';
-    ctx.miterLimit = 2;
-    ctx.strokeStyle = '#000000';
-    ctx.fillStyle = '#000000';
-    // 論理座標0.4px ≈ 拡大描画時に1ドット強。見た目の太さはほとんど変えず欠けだけ防ぐ
-    ctx.lineWidth = 0.4;
-    ctx.strokeText(text, x, yy);
-    ctx.fillText(text, x, yy);
-}
-
 function applyMpb20Font(ctx, fontFamily, size, weight) {
     // サイズも整数化して、拡大描画時の画線がドット境界に乗りやすくする
     ctx.font = `${weight} ${Math.round(size)}px ${fontFamily}`;
@@ -1188,8 +1161,9 @@ async function createMPB20LabelPdf(labelData) {
 
         if (labelData.printNotice) {
             labelData.noticeLines.forEach(function(line) {
-                // 「ご」などの濁点が欠けないよう、安定描画を使う
-                drawStablePrintLine(
+                // 縁取りすると「承」など画数の多い字の中が埋まるため、
+                // 本文と同じ通常描画（Bold・縁取りなし）にする
+                drawFittedLine(
                     ctx,
                     line,
                     centerX,
