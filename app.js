@@ -579,7 +579,8 @@ function buildEposPrintXml(labelData) {
     xml += `<text>${labelData.desiredLine}&#10;&#10;</text>`;
 
     if (labelData.printNotice) {
-        xml += '<text width="1" height="1" em="false"/>';
+        // 注意文は少し大きく（横幅はそのまま、高さを一段上げる）
+        xml += '<text width="1" height="2" em="false"/>';
         xml += '<text>﹡大幅に金額が離れている場合は&#10;</text>';
         xml += '<text>お売りする事が出来ません。&#10;</text>';
         xml += '<text>ご了承下さい。&#10;&#10;</text>';
@@ -1067,7 +1068,7 @@ async function createMPB20LabelPdf(labelData) {
         body: { size: 26, weight: 'bold', line: 34 },
         price: { size: 24, weight: 'bold', line: 32 },
         desired: { size: 50, weight: 'bold', line: 58 },
-        notice: { size: 22, weight: 'bold', line: 28 },
+        notice: { size: 26, weight: 'bold', line: 34 },
         footer: { size: 22, weight: 'bold', line: 28 }
     };
 
