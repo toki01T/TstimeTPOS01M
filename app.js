@@ -1091,8 +1091,8 @@ async function createMPB20LabelPdf(labelData) {
         body: { size: 26, weight: 'bold', line: 34 },
         price: { size: 24, weight: 'bold', line: 32 },
         desired: { size: 50, weight: 'bold', line: 58 },
-        notice: { size: 26, weight: 'normal', line: 34 },
-        footer: { size: 22, weight: 'bold', line: 28 }
+        notice: { size: 24, weight: 'bold', line: 32 },
+        footer: { size: 24, weight: 'normal', line: 30 }
     };
 
     let yEstimate = paddingTop + fonts.header.line + blockGapPx;
@@ -1161,24 +1161,33 @@ async function createMPB20LabelPdf(labelData) {
 
         if (labelData.printNotice) {
             labelData.noticeLines.forEach(function(line) {
-                // 端末フォントの細線は二値化でがたつくため、
-                // 印字用のBIZ UD Regular（通常太さ）でドットに落としやすくする
+                // Regularより少し太く、Bold本文より少し小さくして読みやすくする
                 drawFittedLine(
                     ctx,
                     line,
                     centerX,
                     Math.round(y),
                     contentWidthPx,
-                    MPB20_FONT_REGULAR_FAMILY,
+                    MPB20_FONT_FAMILY,
                     fonts.notice.size,
-                    'normal'
+                    fonts.notice.weight
                 );
                 y += fonts.notice.line;
             });
             y += 14;
         }
 
-        drawFittedLine(ctx, labelData.dateString, centerX, y, contentWidthPx, fontFamily, fonts.footer.size, fonts.footer.weight);
+        // 日付は小さいBoldだとがたつくので、印字用Regularをやや大きめに使う
+        drawFittedLine(
+            ctx,
+            labelData.dateString,
+            centerX,
+            Math.round(y),
+            contentWidthPx,
+            MPB20_FONT_REGULAR_FAMILY,
+            fonts.footer.size,
+            fonts.footer.weight
+        );
         y += fonts.footer.line;
 
         // 日付と点線の間に2mm空ける
@@ -1192,7 +1201,16 @@ async function createMPB20LabelPdf(labelData) {
         ctx.imageSmoothingEnabled = true;
         y += qrSize + 10;
 
-        drawFittedLine(ctx, labelData.qrcodeNumber, centerX, y, contentWidthPx, fontFamily, fonts.footer.size, fonts.footer.weight);
+        drawFittedLine(
+            ctx,
+            labelData.qrcodeNumber,
+            centerX,
+            Math.round(y),
+            contentWidthPx,
+            MPB20_FONT_REGULAR_FAMILY,
+            fonts.footer.size,
+            fonts.footer.weight
+        );
     };
 
     // 印字ドットと等倍で文字を描くと画線が1ドット未満になって掠れるため、
@@ -2262,6 +2280,15 @@ function loadFromHistory(item) {
     document.getElementById('batteryCost').value = item.batteryCost || '';
     document.getElementById('beltCost').value = item.beltCost || '';
     document.getElementById('desiredPrice').value = item.desiredPrice;
+
+    // 履歴の連番を現在の連番として復元する（その連番のまま再印刷できるようにする）
+    if (item.serialNumber !== undefined && item.serialNumber !== null && item.serialNumber !== '') {
+        const parsedSerial = Number(String(item.serialNumber).replace(/[^\d]/g, ''));
+        if (Number.isSafeInteger(parsedSerial) && parsedSerial > 0) {
+            saveSerialNumber(parsedSerial);
+            updateSerialDisplay();
+        }
+    }
     
     // カテゴリーの設定
     if (item.category) {
@@ -2296,6 +2323,12 @@ function loadFromHistory(item) {
     // 印刷時のプリンターがあれば復元する
     if (item.printer) {
         applyPrinterSelection(item.printer);
+    }
+
+    const modelNumberField = document.getElementById('modelNumber');
+    if (modelNumberField) {
+        autoLineBreakSmart(modelNumberField, PRINT_LINE_UNITS);
+        autoGrowTextarea(modelNumberField);
     }
     
     updatePreview();
