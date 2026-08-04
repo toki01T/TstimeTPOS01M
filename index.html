@@ -3,12 +3,21 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+    <meta name="theme-color" content="#0f172a">
+    <meta name="mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="default">
+    <meta name="apple-mobile-web-app-title" content="T's time">
+    <meta name="application-name" content="T's time">
     <meta name="format-detection" content="telephone=no">
+    <meta name="description" content="T's time 値札印刷システム">
     <title>T's time - 値札印刷システム</title>
+    <link rel="manifest" href="manifest.webmanifest">
+    <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+    <link rel="icon" type="image/png" sizes="192x192" href="icons/icon-192.png">
+    <link rel="icon" type="image/png" sizes="512x512" href="icons/icon-512.png">
     <!-- 更新が端末のキャッシュに阻まれないよう、修正のたびにこの番号を上げる -->
-    <link rel="stylesheet" href="style.css?v=20260802z">
+    <link rel="stylesheet" href="style.css?v=20260803a">
 </head>
 <body>
     <div class="container">
@@ -65,7 +74,7 @@
                 </div>
                 <div class="menu-item">
                     <button id="testReturn" class="menu-button-secondary">戻り先をテスト</button>
-                    <p class="menu-info menu-info-sub">印刷後と同じく、ショートカット「Tstime」が自動で開きます</p>
+                    <p class="menu-info menu-info-sub" id="returnHint">印刷後の戻り方は端末により異なります</p>
                 </div>
                 <div class="menu-item">
                     <p class="menu-info">バージョン: <span id="appVersion">-</span></p>
@@ -225,6 +234,6 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
     <script src="epos-2.27.0.js" onerror="console.warn('ePOS SDK not loaded')"></script>
-    <script src="app.js?v=20260802z"></script>
+    <script src="app.js?v=20260803a"></script>
 </body>
 </html>

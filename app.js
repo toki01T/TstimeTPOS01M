@@ -302,13 +302,17 @@ document.addEventListener('DOMContentLoaded', function() {
     const versionLabel = document.getElementById('appVersion');
     if (versionLabel) versionLabel.textContent = APP_VERSION;
 
-    // PWAではショートカット名で戻る。照合用に表示する
+    // PWAの戻り先と案内文を表示
     const returnLabel = document.getElementById('returnTarget');
     if (returnLabel) {
         returnLabel.textContent = getPrintReturnUrl();
     }
+    const returnHint = document.getElementById('returnHint');
+    if (returnHint) {
+        returnHint.textContent = getReturnHintText();
+    }
 
-    // 印刷を挟まずに、同じ戻り先（ショートカット）を試せるようにする
+    // 印刷を挟まずに、同じ戻り先を試せるようにする
     const testReturnButton = document.getElementById('testReturn');
     if (testReturnButton) {
         testReturnButton.addEventListener('click', function() {
@@ -609,6 +613,16 @@ function isStandaloneWebApp() {
            (window.matchMedia && window.matchMedia('(display-mode: standalone)').matches);
 }
 
+function isAndroidDevice() {
+    return /android/i.test(navigator.userAgent || '');
+}
+
+function isIosDevice() {
+    const ua = navigator.userAgent || '';
+    return /iphone|ipad|ipod/i.test(ua) ||
+           (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+}
+
 // ホーム画面のWebアプリはhttpsのURLでは開けず、渡してもSafariが別に開いてしまう。
 // インストール済みのWebアプリ本体を起動できるのはwebapp://スキームだけ。
 // ただしホーム画面へ追加した時のURLと1文字でも違うと開けないため、
@@ -632,13 +646,53 @@ function getShortcutReturnUrl() {
     return 'shortcuts://run-shortcut?name=' + encodeURIComponent(RETURN_SHORTCUT_NAME);
 }
 
-// 印刷アプリからの戻り先URL。
-// ホーム画面のWebアプリでは、印刷完了後にショートカットを自動起動して戻す。
-// （webapp://を直接渡すとiOS 26で開けないことがある）
-function getPrintReturnUrl() {
-    if (isStandaloneWebApp()) return getShortcutReturnUrl();
+function getHttpsAppUrl() {
     return window.location.origin + window.location.pathname;
 }
+
+// 印刷アプリからの戻り先URL。
+// iOSのホーム画面アプリはショートカット経由、AndroidのPWAはhttpsのまま戻す
+function getPrintReturnUrl() {
+    if (isStandaloneWebApp()) {
+        if (isAndroidDevice()) {
+            return getHttpsAppUrl();
+        }
+        if (isIosDevice()) {
+            return getShortcutReturnUrl();
+        }
+    }
+    return getHttpsAppUrl();
+}
+
+function getReturnHintText() {
+    if (isAndroidDevice()) {
+        return 'AndroidではChromeメニュー「アプリをインストール」または「ホーム画面に追加」で使えます。印刷後は同じアプリへ戻ります。';
+    }
+    if (isIosDevice()) {
+        return '印刷後と同じく、ショートカット「Tstime」が自動で開きます';
+    }
+    return '印刷後の戻り方は端末により異なります';
+}
+
+function registerServiceWorker() {
+    if (!('serviceWorker' in navigator)) return;
+    // file:// では登録できない。https / localhost のみ
+    if (window.location.protocol !== 'https:' &&
+        window.location.hostname !== 'localhost' &&
+        window.location.hostname !== '127.0.0.1') {
+        return;
+    }
+
+    window.addEventListener('load', function() {
+        navigator.serviceWorker.register('./sw.js').then(function(registration) {
+            console.log('Service Worker登録完了:', registration.scope);
+        }).catch(function(error) {
+            console.warn('Service Worker登録失敗:', error);
+        });
+    });
+}
+
+registerServiceWorker();
 
 // 印刷前の確認。
 // キャンセルはApp Storeへ移動せず、入力内容を残したままこのアプリに留まる
