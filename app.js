@@ -295,8 +295,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
     setupBottomButtonReveal();
 
-    // BIZ UDゴシックはMP-B20の印字にしか使わないため、
-    // MP-B20を選んでいるときだけ先読みする（4MB超のため他機種では読み込まない）
+    // BIZ UDゴシックはMP-B20・TM系の画像印字で使うため先読みする
     preloadMpb20FontIfSelected();
 
     const versionLabel = document.getElementById('appVersion');
@@ -707,149 +706,116 @@ function confirmPrint(appName) {
     return ok;
 }
 
-// Epson TM Print Assistant印刷（iPad/iPhone）
-function printWithPrintAssist(serialNumber, modelNumber, category, operation, purchasePrice, batteryCost, beltCost, desiredPrice) {
+// Epson TM Print Assistant印刷（iPad/iPhone/Android）
+// TM-P20IIの内蔵フォントは字形が独特なため、BIZ UDゴシックで描いた画像を送る
+async function printWithPrintAssist(serialNumber, modelNumber, category, operation, purchasePrice, batteryCost, beltCost, desiredPrice) {
     console.log('=== TM Print Assistant印刷開始 ===');
     console.log('入力データ:', {serialNumber, modelNumber, category, operation, purchasePrice, batteryCost, beltCost, desiredPrice});
 
     if (!confirmPrint('Epson TM Print Assistant')) return;
-    
+
     try {
-        const labelData = buildEposLabelData(serialNumber, modelNumber, category, operation, purchasePrice, batteryCost, beltCost, desiredPrice);
+        showMessage('綺麗なフォントで印字データを作成中...', 'success');
+        const built = await buildTmRasterPrintXml(
+            serialNumber, modelNumber, category, operation,
+            purchasePrice, batteryCost, beltCost, desiredPrice
+        );
+        const xml = built.xml;
 
-        console.log('日時:', labelData.dateString);
-        console.log('QRコード番号:', labelData.qrcodeNumber);
-        console.log('データURL:', labelData.dataURL);
+        console.log('ラスタサイズ:', built.raster.width, 'x', built.raster.height);
+        console.log('生成されたXML文字数:', xml.length);
 
-        const xml = buildEposPrintXml(labelData);
-        
-        console.log('生成されたXML:');
-        console.log(xml);
-        
-        // TM Print Assistant公式の方法：XMLを直接encodeURIComponentでエンコード
-        // Base64エンコードは不要！
         const encodedXML = encodeURIComponent(xml);
-        console.log('URLエンコード完了');
-        console.log('エンコード後の文字数:', encodedXML.length);
-        console.log('エンコードデータ（最初の100文字）:', encodedXML.substring(0, 100));
-        
-        // URLスキーム生成（TM Print Assistant公式フォーマット）
-        // tmprintassistant:// 形式を使用
+        console.log('URLエンコード完了 / 文字数:', encodedXML.length);
+
         const returnUrl = getPrintReturnUrl();
         const successParam = returnUrl ? `success=${encodeURIComponent(returnUrl)}&` : '';
         const printURL = `tmprintassistant://tmprintassistant.epson.com/print?${successParam}ver=1&data-type=eposprintxml&reselect=yes&data=${encodedXML}`;
         console.log('完全なURLスキーム長:', printURL.length);
-        console.log('URLスキーム（最初の200文字）:', printURL.substring(0, 200));
-        
-        // デバッグ用：ユーザーに表示
-        showMessage(`印刷データを生成しました（XML: ${xml.length}文字）。TM Print Assistantを起動します...`, 'success');
-        
-        // 少し待ってからURLスキームを開く
+
+        if (printURL.length > 1200000) {
+            throw new Error('印刷データが大きすぎます。型番を短くして再度お試しください');
+        }
+
+        showMessage('TM Print Assistantを起動します...', 'success');
+
         setTimeout(function() {
-            console.log('URLスキームを開きます...');
-            
-            // iOS/iPadで確実に動作する方法
             const link = document.createElement('a');
             link.href = printURL;
             link.style.display = 'none';
             document.body.appendChild(link);
             link.click();
             document.body.removeChild(link);
-            console.log('URLスキーム起動完了');
-            
             showMessage('TM Print Assistantアプリに印刷データを送信しました', 'success');
         }, 500);
-        
-        console.log('=== TM Print Assistant起動処理完了 ===');
-        
-        // 履歴を保存
+
         saveToHistory(serialNumber, modelNumber, category, operation, purchasePrice, batteryCost, beltCost, desiredPrice);
-        
-        // 連番を自動的に1増やして保存
+
         const newSerial = parseInt(serialNumber) + 1;
         saveSerialNumber(newSerial);
         updateSerialDisplay();
         updatePreview();
-        
+
         showMessage('印刷データを送信しました。連番を ' + newSerial + ' に更新しました。', 'success');
-        
+
     } catch (error) {
-        console.error('=== TM Print Assistant印刷エラー ===');
-        console.error('エラー詳細:', error);
-        console.error('エラーメッセージ:', error.message);
-        console.error('エラースタック:', error.stack);
-        showMessage('印刷エラー: ' + error.message + ' (コンソールで詳細を確認してください)', 'error');
+        console.error('=== TM Print Assistant印刷エラー ===', error);
+        showMessage('印刷エラー: ' + error.message, 'error');
     }
 }
 
-// TM Assistant印刷（iPad/iPhone）
-function printWithTMAssistant(serialNumber, modelNumber, category, operation, purchasePrice, batteryCost, beltCost, desiredPrice) {
+// TM Assistant印刷（iPad/iPhone/Android）
+async function printWithTMAssistant(serialNumber, modelNumber, category, operation, purchasePrice, batteryCost, beltCost, desiredPrice) {
     console.log('=== TM Assistant印刷開始 ===');
     console.log('入力データ:', {serialNumber, modelNumber, category, operation, purchasePrice, batteryCost, beltCost, desiredPrice});
-    
+
     if (!confirmPrint('TM Assistant')) return;
-    
+
     try {
-        const labelData = buildEposLabelData(serialNumber, modelNumber, category, operation, purchasePrice, batteryCost, beltCost, desiredPrice);
+        showMessage('綺麗なフォントで印字データを作成中...', 'success');
+        const built = await buildTmRasterPrintXml(
+            serialNumber, modelNumber, category, operation,
+            purchasePrice, batteryCost, beltCost, desiredPrice
+        );
+        const xml = built.xml;
 
-        console.log('日時:', labelData.dateString);
-        console.log('QRコード番号:', labelData.qrcodeNumber);
-        console.log('データURL:', labelData.dataURL);
+        console.log('ラスタサイズ:', built.raster.width, 'x', built.raster.height);
+        console.log('生成されたXML文字数:', xml.length);
 
-        const xml = buildEposPrintXml(labelData);
-        
-        console.log('生成されたXML:');
-        console.log(xml);
-        
-        // TM Assistant用のBase64エンコード
         const base64XML = btoa(unescape(encodeURIComponent(xml)));
-        console.log('Base64エンコード完了');
-        console.log('エンコード後の文字数:', base64XML.length);
-        
-        // URLスキーム生成（TM Assistant公式フォーマット）
-        // tmassistant:// 形式を使用
+        console.log('Base64エンコード完了 / 文字数:', base64XML.length);
+
         const printURL = `tmassistant://print?data=${encodeURIComponent(base64XML)}`;
         console.log('完全なURLスキーム長:', printURL.length);
-        console.log('URLスキーム（最初の200文字）:', printURL.substring(0, 200));
-        
-        // デバッグ用：ユーザーに表示
-        showMessage(`印刷データを生成しました（XML: ${xml.length}文字）。TM Assistantを起動します...`, 'success');
-        
-        // 少し待ってからURLスキームを開く
+
+        if (printURL.length > 1200000) {
+            throw new Error('印刷データが大きすぎます。型番を短くして再度お試しください');
+        }
+
+        showMessage('TM Assistantを起動します...', 'success');
+
         setTimeout(function() {
-            console.log('URLスキームを開きます...');
-            
-            // iOS/iPadで確実に動作する方法
             const link = document.createElement('a');
             link.href = printURL;
             link.style.display = 'none';
             document.body.appendChild(link);
             link.click();
             document.body.removeChild(link);
-            console.log('URLスキーム起動完了');
-            
             showMessage('TM Assistantアプリに印刷データを送信しました', 'success');
         }, 500);
-        
-        console.log('=== TM Assistant起動処理完了 ===');
-        
-        // 履歴を保存
+
         saveToHistory(serialNumber, modelNumber, category, operation, purchasePrice, batteryCost, beltCost, desiredPrice);
-        
-        // 連番を自動的に1増やして保存
+
         const newSerial = parseInt(serialNumber) + 1;
         saveSerialNumber(newSerial);
         updateSerialDisplay();
         updatePreview();
-        
+
         showMessage('印刷データを送信しました。連番を ' + newSerial + ' に更新しました。', 'success');
-        
+
     } catch (error) {
-        console.error('=== TM Assistant印刷エラー ===');
-        console.error('エラー詳細:', error);
-        console.error('エラーメッセージ:', error.message);
-        console.error('エラースタック:', error.stack);
-        showMessage('印刷エラー: ' + error.message + ' (コンソールで詳細を確認してください)', 'error');
+        console.error('=== TM Assistant印刷エラー ===', error);
+        showMessage('印刷エラー: ' + error.message, 'error');
     }
 }
 
@@ -1086,12 +1052,9 @@ let mpb20RegularFontFace = null;
 // 「T❜s time」の行だけは見た目を変えたくないので、従来のフォントで描く
 const MPB20_HEADER_FONT_FAMILY = '"Hiragino Sans", "Hiragino Kaku Gothic ProN", "Yu Gothic", sans-serif';
 
-// 印刷時に待たせたくないので先読みする。
-// ただしMP-B20以外では一切使わないフォントなので、選択中のときだけ読む
+// 印刷時に待たせたくないので先読みする（MP-B20・TM系とも画像印字で使用）
 function preloadMpb20FontIfSelected() {
-    if (loadPrinterSelection() !== 'mpb20') return;
     ensurePrintFontReady().catch(function(error) {
-        // 失敗しても印刷時に再試行し、そこで結果を明示する
         console.warn('BIZ UDゴシックの先読み失敗', error);
     });
 }
@@ -1150,10 +1113,13 @@ async function ensurePrintFontReady() {
     }
 }
 
-async function createMPB20LabelPdf(labelData) {
+// 58mmサーマル共通の値札キャンバス（BIZ UDゴシック）。
+// TM-P20IIなど内蔵フォントが独特な機種でも、画像印字なら同じ綺麗な字形になる
+async function renderThermalLabelCanvas(labelData, options) {
+    options = options || {};
     await ensurePrintFontReady();
 
-    // MP-B20は203dpi（8ドット/mm）。58mm用紙の実印字幅48mmに1:1で合わせる
+    // 203dpi（8ドット/mm）。58mm用紙の実印字幅48mmに1:1で合わせる
     const pxPerMm = 8;
     const widthMm = 48;
     const widthPx = widthMm * pxPerMm; // 384
@@ -1162,9 +1128,8 @@ async function createMPB20LabelPdf(labelData) {
     const blockGapPx = 2 * pxPerMm; // 連番・カテゴリー・型番の間隔2mm
     // 用紙を節約するため上端まで詰める。文字は上端が基準なので0でも欠けない
     const paddingTop = 0;
-    // MP-B20はサーマルヘッドから紙排出口まで距離があり、印字直後はその分が本体内に残る。
-    // URL Print Agentに追加フィードを指示する手段が無いため、末尾の余白で押し出す
-    const paddingBottom = 14 * pxPerMm;
+    // MP-B20は排紙距離があるので余白多め。TM系はカットがあるので短くてよい
+    const paddingBottom = options.paddingBottom != null ? options.paddingBottom : (14 * pxPerMm);
     const fontFamily = MPB20_FONT_FAMILY;
     // 型番が長いほどQRのセル数が増えるので、大きさは1セル3ドットを保てるよう可変にする
     const qr = createPrintableQRCode(labelData.dataURL, contentWidthPx);
@@ -1333,7 +1298,16 @@ async function createMPB20LabelPdf(labelData) {
 
     outputCtx.putImageData(outputImage, 0, 0);
     await waitForNextFrame();
+    return outputCanvas;
+}
 
+async function createMPB20LabelPdf(labelData) {
+    const outputCanvas = await renderThermalLabelCanvas(labelData, {
+        // MP-B20はサーマルヘッドから紙排出口まで距離があり、印字直後はその分が本体内に残る。
+        // URL Print Agentに追加フィードを指示する手段が無いため、末尾の余白で押し出す
+        paddingBottom: 14 * 8
+    });
+    const widthMm = 48;
     const imgData = outputCanvas.toDataURL('image/png');
     const heightMm = widthMm * (outputCanvas.height / outputCanvas.width);
     const { jsPDF } = window.jspdf;
@@ -1346,6 +1320,74 @@ async function createMPB20LabelPdf(labelData) {
     // URLスキームで渡すため、可逆圧縮でデータ量を抑える
     pdf.addImage(imgData, 'PNG', 0, 0, widthMm, heightMm, undefined, 'SLOW');
     return pdf.output('datauristring').split(',')[1];
+}
+
+// キャンバスをePOS-Print用の1bitラスタ（横8ドット単位）へ変換する
+function canvasToEposMonoRaster(canvas) {
+    const width = canvas.width;
+    const height = canvas.height;
+    const paddedWidth = Math.ceil(width / 8) * 8;
+    const ctx = canvas.getContext('2d');
+    const imageData = ctx.getImageData(0, 0, width, height).data;
+    const rowBytes = paddedWidth / 8;
+    const bytes = new Uint8Array(rowBytes * height);
+
+    for (let y = 0; y < height; y++) {
+        for (let x = 0; x < paddedWidth; x++) {
+            let black = false;
+            if (x < width) {
+                const i = (y * width + x) * 4;
+                const lum = imageData[i] * 0.299 + imageData[i + 1] * 0.587 + imageData[i + 2] * 0.114;
+                black = lum < 160;
+            }
+            if (black) {
+                bytes[y * rowBytes + (x >> 3)] |= (0x80 >> (x & 7));
+            }
+        }
+    }
+
+    let binary = '';
+    const chunk = 0x8000;
+    for (let i = 0; i < bytes.length; i += chunk) {
+        const slice = bytes.subarray(i, Math.min(i + chunk, bytes.length));
+        binary += String.fromCharCode.apply(null, slice);
+    }
+
+    return {
+        width: paddedWidth,
+        height: height,
+        data: btoa(binary)
+    };
+}
+
+// TM Print Assistant / TM Assistant向け：綺麗なBIZ UD字形を画像として送る
+function buildEposRasterPrintXml(raster) {
+    let xml = '<?xml version="1.0" encoding="utf-8"?>';
+    xml += '<epos-print xmlns="http://www.epson-pos.com/schemas/2011/03/epos-print">';
+    // 高速印字のため左寄せ＋幅は8の倍数（384）
+    xml += '<text align="left"/>';
+    xml += '<image width="' + raster.width + '" height="' + raster.height + '" color="color_1" mode="mono">';
+    xml += raster.data;
+    xml += '</image>';
+    xml += '<feed line="2"/>';
+    xml += '<cut type="feed"/>';
+    xml += '</epos-print>';
+    return xml;
+}
+
+async function buildTmRasterPrintXml(serialNumber, modelNumber, category, operation, purchasePrice, batteryCost, beltCost, desiredPrice) {
+    if (typeof QRCode === 'undefined') {
+        throw new Error('QRコードライブラリの読み込みに失敗しました');
+    }
+    const labelData = buildLabelPrintData(
+        serialNumber, modelNumber, category, operation,
+        purchasePrice, batteryCost, beltCost, desiredPrice
+    );
+    // TM系はカットがあるので余白は短めにしてURL長も抑える
+    const canvas = await renderThermalLabelCanvas(labelData, { paddingBottom: 6 * 8 });
+    const raster = canvasToEposMonoRaster(canvas);
+    const xml = buildEposRasterPrintXml(raster);
+    return { xml: xml, raster: raster, labelData: labelData };
 }
 
 // XML特殊文字エスケープ
