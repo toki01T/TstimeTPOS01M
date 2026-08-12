@@ -549,21 +549,23 @@ function buildEposLabelData(serialNumber, modelNumber, category, operation, purc
 function buildEposPrintXml(labelData) {
     let xml = '<?xml version="1.0" encoding="utf-8"?>';
     xml += '<epos-print xmlns="http://www.epson-pos.com/schemas/2011/03/epos-print">';
-    xml += '<text lang="ja"/>';
+    // TM-P20IIは既定がFont B(42桁)でTM-m30系と桁が違うことがあるため、
+    // Font A(半角32桁 / 全角16桁)に固定してレイアウトを安定させる
+    xml += '<text lang="ja" font="font_a"/>';
 
-    // 58mm用紙・width="2"で1行16文字。
-    // 「’」は全角幅なので、スペースを2個にして連番まで1行に収める。
-    // 「❜」(U+275C)はShift_JISに無くプリンター側で脱落するため使えない
-    xml += '<text width="2" height="1" em="true"/>';
-    xml += '<text align="center"/>';
-    xml += `<text>T’s time  ${labelData.serialHalfWidth}&#10;&#10;</text>`;
+    // ヘッダーは1行に詰めると「’」や機種差で連番が欠ける。
+    // ブランドと連番を分け、ASCIIのアポストロフィで幅を確保する。
+    // height=2 + em でTM-P20IIの細い印字を目立たせる
+    xml += '<text align="center" width="2" height="2" em="true"/>';
+    xml += '<text>T\'s time&#10;</text>';
+    xml += `<text>${escapeXml(labelData.serialHalfWidth)}&#10;&#10;</text>`;
 
-    xml += '<text width="1" height="1" em="false"/>';
+    // 本文も強調印字にして細く見えないようにする
+    xml += '<text align="center" width="1" height="1" em="true"/>';
     if (labelData.category) {
         xml += `<text>${escapeXml(labelData.category)}&#10;&#10;</text>`;
     }
 
-    xml += '<text align="center"/>';
     for (let line of labelData.modelLines) {
         xml += `<text>${escapeXml(line)}&#10;</text>`;
     }
@@ -580,26 +582,27 @@ function buildEposPrintXml(labelData) {
     xml += '<text>&#10;</text>';
 
     xml += '<text width="2" height="2" em="true"/>';
-    xml += `<text>${labelData.desiredLine}&#10;&#10;</text>`;
+    xml += `<text>${escapeXml(labelData.desiredLine)}&#10;&#10;</text>`;
 
     if (labelData.printNotice) {
-        // 注意文は少し大きく、太字にはしない（ご了承下さい。などが潰れやすいため）
-        xml += '<text width="1" height="2" em="false"/>';
-        xml += '<text>﹡大幅に金額が離れている場合は&#10;</text>';
+        // 注意文は少し大きく。特殊記号﹡は機種によって欠けるので * にする
+        xml += '<text width="1" height="2" em="true"/>';
+        xml += '<text>*大幅に金額が離れている場合は&#10;</text>';
         xml += '<text>お売りする事が出来ません。&#10;</text>';
         xml += '<text>ご了承下さい。&#10;&#10;</text>';
     }
 
-    xml += '<text width="1" height="1" em="false"/>';
+    xml += '<text width="1" height="1" em="true"/>';
     xml += `<text>${escapeXml(labelData.dateString)}&#10;</text>`;
     // 日付と点線の間に約2mm空ける（203dpi換算で16ドット）
     xml += '<feed unit="16"/>';
     // 点線を少し太く見せるため高さを一段上げる
-    xml += '<text width="1" height="2" em="false"/>';
+    xml += '<text width="1" height="2" em="true"/>';
     xml += '<text>- - - - - - - - - - - - - - - -&#10;&#10;</text>';
 
     xml += `<symbol type="qrcode_model_2" level="h" width="3" height="0" size="0">${escapeXml(labelData.dataURL)}</symbol>`;
-    xml += `<text>&#10;${labelData.qrcodeNumber}&#10;</text>`;
+    xml += '<text width="1" height="1" em="true"/>';
+    xml += `<text>&#10;${escapeXml(labelData.qrcodeNumber)}&#10;</text>`;
     xml += '<feed line="2"/>';
     xml += '<cut type="feed"/>';
     xml += '</epos-print>';
