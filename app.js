@@ -747,7 +747,7 @@ async function printWithPrintAssist(serialNumber, modelNumber, category, operati
             link.click();
             document.body.removeChild(link);
             showMessage('TM Print Assistantアプリに印刷データを送信しました', 'success');
-        }, 500);
+        }, 50);
 
         saveToHistory(serialNumber, modelNumber, category, operation, purchasePrice, batteryCost, beltCost, desiredPrice);
 
@@ -802,7 +802,7 @@ async function printWithTMAssistant(serialNumber, modelNumber, category, operati
             link.click();
             document.body.removeChild(link);
             showMessage('TM Assistantアプリに印刷データを送信しました', 'success');
-        }, 500);
+        }, 50);
 
         saveToHistory(serialNumber, modelNumber, category, operation, purchasePrice, batteryCost, beltCost, desiredPrice);
 
@@ -1265,9 +1265,8 @@ async function renderThermalLabelCanvas(labelData, options) {
 
     // 印字ドットと等倍で文字を描くと画線が1ドット未満になって掠れるため、
     // 拡大して描いてから等倍へ縮小し、そのうえでドットを判定する。
-    // 型番が長いと拡大後の高さが端末のキャンバス上限を超えて下部が欠けるので、
-    // 横帯に区切って描き、帯ごとに縮小して貼り合わせる
-    const supersample = 3;
+    // TM系は supersample=2 + 一括描画で高速化。長い値札だけ帯分割する
+    const supersample = options.supersample != null ? options.supersample : 3;
     const bandHeight = 400;
     const bandMargin = 16;
 
@@ -1277,27 +1276,44 @@ async function renderThermalLabelCanvas(labelData, options) {
     const outputCtx = outputCanvas.getContext('2d');
     const outputImage = outputCtx.createImageData(widthPx, finalHeight);
 
-    const band = document.createElement('canvas');
-    band.width = widthPx * supersample;
-    band.height = (bandHeight + bandMargin * 2) * supersample;
-    const bandCtx = band.getContext('2d', { willReadFrequently: true });
+    const scaledHeight = finalHeight * supersample;
+    const canSinglePass = scaledHeight <= 3600;
 
-    for (let top = 0; top < finalHeight; top += bandHeight) {
-        const height = Math.min(bandHeight, finalHeight - top);
+    if (canSinglePass) {
+        const full = document.createElement('canvas');
+        full.width = widthPx * supersample;
+        full.height = scaledHeight;
+        const fullCtx = full.getContext('2d', { willReadFrequently: true });
+        fullCtx.fillStyle = '#ffffff';
+        fullCtx.fillRect(0, 0, full.width, full.height);
+        fullCtx.setTransform(supersample, 0, 0, supersample, 0, 0);
+        fullCtx.fillStyle = '#000000';
+        drawLabel(fullCtx);
+        reduceBandToDots(fullCtx, supersample, 0, widthPx, finalHeight, outputImage, 0);
+    } else {
+        const band = document.createElement('canvas');
+        band.width = widthPx * supersample;
+        band.height = (bandHeight + bandMargin * 2) * supersample;
+        const bandCtx = band.getContext('2d', { willReadFrequently: true });
 
-        bandCtx.setTransform(1, 0, 0, 1, 0, 0);
-        bandCtx.fillStyle = '#ffffff';
-        bandCtx.fillRect(0, 0, band.width, band.height);
-        // 帯の境目で文字が欠けないよう、上下に余白分を含めて描いてから切り出す
-        bandCtx.setTransform(supersample, 0, 0, supersample, 0, -(top - bandMargin) * supersample);
-        bandCtx.fillStyle = '#000000';
-        drawLabel(bandCtx);
+        for (let top = 0; top < finalHeight; top += bandHeight) {
+            const height = Math.min(bandHeight, finalHeight - top);
 
-        reduceBandToDots(bandCtx, supersample, bandMargin * supersample, widthPx, height, outputImage, top);
+            bandCtx.setTransform(1, 0, 0, 1, 0, 0);
+            bandCtx.fillStyle = '#ffffff';
+            bandCtx.fillRect(0, 0, band.width, band.height);
+            bandCtx.setTransform(supersample, 0, 0, supersample, 0, -(top - bandMargin) * supersample);
+            bandCtx.fillStyle = '#000000';
+            drawLabel(bandCtx);
+
+            reduceBandToDots(bandCtx, supersample, bandMargin * supersample, widthPx, height, outputImage, top);
+        }
     }
 
     outputCtx.putImageData(outputImage, 0, 0);
-    await waitForNextFrame();
+    if (!options.fast) {
+        await waitForNextFrame();
+    }
     return outputCanvas;
 }
 
@@ -1369,10 +1385,46 @@ function buildEposRasterPrintXml(raster) {
     xml += '<image width="' + raster.width + '" height="' + raster.height + '" color="color_1" mode="mono">';
     xml += raster.data;
     xml += '</image>';
-    xml += '<feed line="2"/>';
-    xml += '<cut type="feed"/>';
+    // feed/cut type=feed だと下部に余分な白紙が出るため、追加送りはしない
+    xml += '<cut type="no_feed"/>';
     xml += '</epos-print>';
     return xml;
+}
+
+// 画像下端の白い行を削って余白と転送量を減らす
+function trimCanvasBottomWhite(canvas, keepPx) {
+    const width = canvas.width;
+    const height = canvas.height;
+    const ctx = canvas.getContext('2d');
+    const data = ctx.getImageData(0, 0, width, height).data;
+    let lastInkY = -1;
+
+    for (let y = height - 1; y >= 0; y--) {
+        let hasInk = false;
+        const row = y * width * 4;
+        for (let x = 0; x < width; x++) {
+            const i = row + x * 4;
+            if (data[i] < 250 || data[i + 1] < 250 || data[i + 2] < 250) {
+                hasInk = true;
+                break;
+            }
+        }
+        if (hasInk) {
+            lastInkY = y;
+            break;
+        }
+    }
+
+    if (lastInkY < 0) return canvas;
+
+    const trimmedHeight = Math.min(height, lastInkY + 1 + Math.max(0, keepPx || 0));
+    if (trimmedHeight >= height) return canvas;
+
+    const out = document.createElement('canvas');
+    out.width = width;
+    out.height = trimmedHeight;
+    out.getContext('2d').drawImage(canvas, 0, 0);
+    return out;
 }
 
 async function buildTmRasterPrintXml(serialNumber, modelNumber, category, operation, purchasePrice, batteryCost, beltCost, desiredPrice) {
@@ -1383,8 +1435,13 @@ async function buildTmRasterPrintXml(serialNumber, modelNumber, category, operat
         serialNumber, modelNumber, category, operation,
         purchasePrice, batteryCost, beltCost, desiredPrice
     );
-    // TM系はカットがあるので余白は短めにしてURL長も抑える
-    const canvas = await renderThermalLabelCanvas(labelData, { paddingBottom: 6 * 8 });
+    // 下部余白は最小（約1mm）。描画後に白行もトリムする
+    let canvas = await renderThermalLabelCanvas(labelData, {
+        paddingBottom: 1 * 8,
+        supersample: 2,
+        fast: true
+    });
+    canvas = trimCanvasBottomWhite(canvas, 8);
     const raster = canvasToEposMonoRaster(canvas);
     const xml = buildEposRasterPrintXml(raster);
     return { xml: xml, raster: raster, labelData: labelData };
