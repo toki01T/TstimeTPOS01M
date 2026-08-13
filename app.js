@@ -1267,7 +1267,7 @@ async function renderThermalLabelCanvas(labelData, options) {
     // 拡大して描いてから等倍へ縮小し、そのうえでドットを判定する。
     // 型番が長いと拡大後の高さが端末のキャンバス上限を超えて下部が欠けるので、
     // 横帯に区切って描き、帯ごとに縮小して貼り合わせる
-    const supersample = 3;
+    const supersample = options.supersample != null ? options.supersample : 3;
     const bandHeight = 400;
     const bandMargin = 16;
 
@@ -1322,6 +1322,17 @@ async function createMPB20LabelPdf(labelData) {
     return pdf.output('datauristring').split(',')[1];
 }
 
+// Uint8ArrayをBase64へ（大きな配列でもスタックを食いすぎない）
+function bytesToBase64(bytes) {
+    let binary = '';
+    const chunk = 0x8000;
+    for (let i = 0; i < bytes.length; i += chunk) {
+        const slice = bytes.subarray(i, Math.min(i + chunk, bytes.length));
+        binary += String.fromCharCode.apply(null, slice);
+    }
+    return btoa(binary);
+}
+
 // キャンバスをePOS-Print用の1bitラスタ（横8ドット単位）へ変換する
 function canvasToEposMonoRaster(canvas) {
     const width = canvas.width;
@@ -1346,30 +1357,46 @@ function canvasToEposMonoRaster(canvas) {
         }
     }
 
-    let binary = '';
-    const chunk = 0x8000;
-    for (let i = 0; i < bytes.length; i += chunk) {
-        const slice = bytes.subarray(i, Math.min(i + chunk, bytes.length));
-        binary += String.fromCharCode.apply(null, slice);
-    }
-
     return {
         width: paddedWidth,
         height: height,
-        data: btoa(binary)
+        rowBytes: rowBytes,
+        bytes: bytes,
+        data: bytesToBase64(bytes)
     };
 }
 
-// TM Print Assistant / TM Assistant向け：綺麗なBIZ UD字形を画像として送る
-function buildEposRasterPrintXml(raster) {
+// TM Print Assistant / TM Assistant向け：綺麗なBIZ UD字形を画像として送る。
+// 1枚の巨大画像だとTM-P20II側のバッファで下部が途切れやすいので、
+// 横帯に分けて連続送信し、最後に紙送りしてからカットする
+function buildEposRasterPrintXml(raster, options) {
+    options = options || {};
+    // 帯の高さは8の倍数。小さすぎるとXMLが冗長、大きすぎるとバッファ溢れ
+    const bandHeight = options.bandHeight != null ? options.bandHeight : 192;
+    // 管理番号の下を確実に排紙口まで出す（ドット単位。8ドット=1mm）
+    const bottomFeedUnits = options.bottomFeedUnits != null ? options.bottomFeedUnits : 64;
+
     let xml = '<?xml version="1.0" encoding="utf-8"?>';
     xml += '<epos-print xmlns="http://www.epson-pos.com/schemas/2011/03/epos-print">';
-    // 高速印字のため左寄せ＋幅は8の倍数（384）
     xml += '<text align="left"/>';
-    xml += '<image width="' + raster.width + '" height="' + raster.height + '" color="color_1" mode="mono">';
-    xml += raster.data;
-    xml += '</image>';
-    xml += '<feed line="2"/>';
+
+    const rowBytes = raster.rowBytes || (raster.width / 8);
+    const bytes = raster.bytes;
+    if (!bytes) {
+        xml += '<image width="' + raster.width + '" height="' + raster.height + '" color="color_1" mode="mono">';
+        xml += raster.data;
+        xml += '</image>';
+    } else {
+        for (let y = 0; y < raster.height; y += bandHeight) {
+            const h = Math.min(bandHeight, raster.height - y);
+            const slice = bytes.subarray(y * rowBytes, (y + h) * rowBytes);
+            xml += '<image width="' + raster.width + '" height="' + h + '" color="color_1" mode="mono">';
+            xml += bytesToBase64(slice);
+            xml += '</image>';
+        }
+    }
+
+    xml += '<feed unit="' + bottomFeedUnits + '"/>';
     xml += '<cut type="feed"/>';
     xml += '</epos-print>';
     return xml;
@@ -1383,10 +1410,16 @@ async function buildTmRasterPrintXml(serialNumber, modelNumber, category, operat
         serialNumber, modelNumber, category, operation,
         purchasePrice, batteryCost, beltCost, desiredPrice
     );
-    // TM系はカットがあるので余白は短めにしてURL長も抑える
-    const canvas = await renderThermalLabelCanvas(labelData, { paddingBottom: 6 * 8 });
+    // 下部が切れないよう管理番号下に十分な余白。データ量は倍率2で抑える
+    const canvas = await renderThermalLabelCanvas(labelData, {
+        paddingBottom: 10 * 8,
+        supersample: 2
+    });
     const raster = canvasToEposMonoRaster(canvas);
-    const xml = buildEposRasterPrintXml(raster);
+    const xml = buildEposRasterPrintXml(raster, {
+        bandHeight: 192,
+        bottomFeedUnits: 64
+    });
     return { xml: xml, raster: raster, labelData: labelData };
 }
 
