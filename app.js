@@ -53,10 +53,20 @@ function loadPrinterSelection() {
 }
 
 function normalizePrinterId(printer) {
-    if (printer === 'printassist' || printer === 'tmassistant' || printer === 'mpb20') {
+    if (printer === 'printassist' || printer === 'tmassistant' || printer === 'mpb20' || printer === 'sms210i') {
         return printer;
     }
     return null;
+}
+
+function printerDisplayName(printer) {
+    const labels = {
+        printassist: 'TM Print Assistant',
+        tmassistant: 'TM Assistant',
+        mpb20: 'MP-B20',
+        sms210i: 'SM-S210i'
+    };
+    return labels[printer] || 'TM Print Assistant';
 }
 
 function applyPrinterSelection(printer, options) {
@@ -65,17 +75,12 @@ function applyPrinterSelection(printer, options) {
 
     savePrinterSelection(normalized);
     updatePrinterDisplay(normalized);
-    if (normalized === 'mpb20') {
+    if (normalized === 'mpb20' || normalized === 'sms210i') {
         preloadMpb20FontIfSelected();
     }
 
     if (options && options.notify) {
-        const labels = {
-            printassist: 'TM Print Assistant',
-            tmassistant: 'TM Assistant',
-            mpb20: 'MP-B20'
-        };
-        showMessage('プリンターを' + labels[normalized] + 'に設定しました', 'success');
+        showMessage('プリンターを' + printerDisplayName(normalized) + 'に設定しました', 'success');
     }
     return true;
 }
@@ -84,14 +89,10 @@ function updatePrinterDisplay(printer) {
     const printAssistBtn = document.getElementById('printAssistOption');
     const tmAssistantBtn = document.getElementById('tmAssistantOption');
     const mpB20Btn = document.getElementById('mpB20Option');
+    const smS210iBtn = document.getElementById('smS210iOption');
     const printerInfo = document.getElementById('printerInfo');
-    const labels = {
-        printassist: 'TM Print Assistant',
-        tmassistant: 'TM Assistant',
-        mpb20: 'MP-B20'
-    };
 
-    [printAssistBtn, tmAssistantBtn, mpB20Btn].forEach(function(btn) {
+    [printAssistBtn, tmAssistantBtn, mpB20Btn, smS210iBtn].forEach(function(btn) {
         if (btn) btn.classList.remove('active');
     });
 
@@ -99,13 +100,15 @@ function updatePrinterDisplay(printer) {
         tmAssistantBtn.classList.add('active');
     } else if (printer === 'mpb20' && mpB20Btn) {
         mpB20Btn.classList.add('active');
+    } else if (printer === 'sms210i' && smS210iBtn) {
+        smS210iBtn.classList.add('active');
     } else if (printAssistBtn) {
         printAssistBtn.classList.add('active');
         printer = 'printassist';
     }
 
     if (printerInfo) {
-        printerInfo.textContent = '現在: ' + (labels[printer] || 'TM Print Assistant');
+        printerInfo.textContent = '現在: ' + printerDisplayName(printer);
     }
 }
 
@@ -135,6 +138,10 @@ document.addEventListener('DOMContentLoaded', function() {
 
     document.getElementById('mpB20Option').addEventListener('click', function() {
         applyPrinterSelection('mpb20', { notify: true });
+    });
+
+    document.getElementById('smS210iOption').addEventListener('click', function() {
+        applyPrinterSelection('sms210i', { notify: true });
     });
     
     // ハンバーガーメニューの設定
@@ -398,6 +405,9 @@ function printLabel() {
     } else if (selectedPrinter === 'mpb20') {
         console.log('MP-B20印刷を使用');
         printWithMPB20(serialNumber, modelNumber, category, operation, purchasePrice, batteryCost, beltCost, desiredPrice);
+    } else if (selectedPrinter === 'sms210i') {
+        console.log('SM-S210i印刷を使用');
+        printWithSMS210i(serialNumber, modelNumber, category, operation, purchasePrice, batteryCost, beltCost, desiredPrice);
     } else {
         showMessage('プリンター選択が不正です', 'error');
     }
@@ -883,6 +893,67 @@ async function printWithMPB20(serialNumber, modelNumber, category, operation, pu
     }
 }
 
+// SM-S210i印刷（Star PassPRNT経由）
+async function printWithSMS210i(serialNumber, modelNumber, category, operation, purchasePrice, batteryCost, beltCost, desiredPrice) {
+    console.log('=== SM-S210i印刷開始 ===');
+
+    if (!confirmPrint('SM-S210i（Star PassPRNT）')) return;
+
+    try {
+        if (!window.jspdf || !window.jspdf.jsPDF) {
+            throw new Error('PDF生成ライブラリの読み込みに失敗しました');
+        }
+        if (typeof QRCode === 'undefined') {
+            throw new Error('QRコードライブラリの読み込みに失敗しました');
+        }
+
+        showMessage('SM-S210i用の印刷データを作成中...', 'success');
+
+        const labelData = buildLabelPrintData(serialNumber, modelNumber, category, operation, purchasePrice, batteryCost, beltCost, desiredPrice);
+        const pdfBase64 = await createThermalLabelPdf(labelData, { paddingBottom: 10 * 8 });
+
+        const returnUrl = getPrintReturnUrl();
+        if (!returnUrl) {
+            throw new Error('印刷後の戻り先を用意できませんでした');
+        }
+
+        // size=2 は SM-S210i の印字幅 384dot（48mm）
+        const printURL =
+            'starpassprnt://v1/print/nopreview?' +
+            'back=' + encodeURIComponent(returnUrl) + '&' +
+            'size=2&' +
+            'cut=tearbar&' +
+            'timeout=30000&' +
+            'popup=enable&' +
+            'pdf=' + encodeURIComponent(pdfBase64);
+
+        console.log('SM-S210i URL scheme length:', printURL.length);
+
+        if (printURL.length > 1200000) {
+            throw new Error('印刷データが大きすぎます。型番を短くして再度お試しください');
+        }
+
+        saveToHistory(serialNumber, modelNumber, category, operation, purchasePrice, batteryCost, beltCost, desiredPrice);
+        const newSerial = parseInt(serialNumber, 10) + 1;
+        saveSerialNumber(newSerial);
+        updateSerialDisplay();
+        updatePreview();
+
+        setTimeout(function() {
+            const link = document.createElement('a');
+            link.href = printURL;
+            link.style.display = 'none';
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+            showMessage('Star PassPRNTへ送信しました。連番を ' + newSerial + ' に更新しました。', 'success');
+        }, 300);
+    } catch (error) {
+        console.error('=== SM-S210i印刷エラー ===', error);
+        showMessage('SM-S210i印刷エラー: ' + error.message, 'error');
+    }
+}
+
 function waitForNextFrame() {
     return new Promise(function(resolve) {
         requestAnimationFrame(function() {
@@ -1301,11 +1372,11 @@ async function renderThermalLabelCanvas(labelData, options) {
     return outputCanvas;
 }
 
-async function createMPB20LabelPdf(labelData) {
+async function createThermalLabelPdf(labelData, options) {
+    options = options || {};
+    const paddingBottom = options.paddingBottom != null ? options.paddingBottom : (14 * 8);
     const outputCanvas = await renderThermalLabelCanvas(labelData, {
-        // MP-B20はサーマルヘッドから紙排出口まで距離があり、印字直後はその分が本体内に残る。
-        // URL Print Agentに追加フィードを指示する手段が無いため、末尾の余白で押し出す
-        paddingBottom: 14 * 8
+        paddingBottom: paddingBottom
     });
     const widthMm = 48;
     const imgData = outputCanvas.toDataURL('image/png');
@@ -1320,6 +1391,12 @@ async function createMPB20LabelPdf(labelData) {
     // URLスキームで渡すため、可逆圧縮でデータ量を抑える
     pdf.addImage(imgData, 'PNG', 0, 0, widthMm, heightMm, undefined, 'SLOW');
     return pdf.output('datauristring').split(',')[1];
+}
+
+async function createMPB20LabelPdf(labelData) {
+    // MP-B20はサーマルヘッドから紙排出口まで距離があり、印字直後はその分が本体内に残る。
+    // URL Print Agentに追加フィードを指示する手段が無いため、末尾の余白で押し出す
+    return createThermalLabelPdf(labelData, { paddingBottom: 14 * 8 });
 }
 
 // Uint8ArrayをBase64へ（大きな配列でもスタックを食いすぎない）
