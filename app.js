@@ -1334,6 +1334,14 @@ async function renderThermalLabelCanvas(labelData, options) {
         );
     };
 
+    const drawBottomAnchorMarks = function(ctx, canvasWidth, canvasHeight) {
+        // PassPRNTは末尾の白ラスターを飛ばすことがある。余白を確実に印字する目印
+        const y = canvasHeight - 1;
+        ctx.fillStyle = '#000';
+        ctx.fillRect(0, y, 2, 1);
+        ctx.fillRect(canvasWidth - 2, y, 2, 1);
+    };
+
     // 印字ドットと等倍で文字を描くと画線が1ドット未満になって掠れるため、
     // 拡大して描いてから等倍へ縮小し、そのうえでドットを判定する。
     // 型番が長いと拡大後の高さが端末のキャンバス上限を超えて下部が欠けるので、
@@ -1368,6 +1376,9 @@ async function renderThermalLabelCanvas(labelData, options) {
     }
 
     outputCtx.putImageData(outputImage, 0, 0);
+    if (options.anchorBottomMargin) {
+        drawBottomAnchorMarks(outputCtx, widthPx, finalHeight);
+    }
     await waitForNextFrame();
     return outputCanvas;
 }
@@ -1378,7 +1389,8 @@ async function createThermalLabelPdf(labelData, options) {
     const paddingTop = options.paddingTop != null ? options.paddingTop : 0;
     const outputCanvas = await renderThermalLabelCanvas(labelData, {
         paddingBottom: paddingBottom,
-        paddingTop: paddingTop
+        paddingTop: paddingTop,
+        anchorBottomMargin: options.anchorBottomMargin === true
     });
     const widthMm = 48;
     const imgData = outputCanvas.toDataURL('image/png');
@@ -1402,11 +1414,11 @@ async function createMPB20LabelPdf(labelData) {
 }
 
 async function createSms210iLabelPdf(labelData) {
-    // MP-B20と同じ下部余白。PassPRNTのtearbarは追加送りで余白がぶれるため使わない（cut=nocut）。
-    // Star系は先頭の白が間引かれやすいため、上端に2mmだけ固定余白を入れて見た目を揃える
+    // MP-B20と同じ14mm下部余白。Star/PassPRNTは末尾の白を飛ばすことがあるので目印を付ける
     return createThermalLabelPdf(labelData, {
         paddingTop: 2 * 8,
-        paddingBottom: 14 * 8
+        paddingBottom: 14 * 8,
+        anchorBottomMargin: true
     });
 }
 
