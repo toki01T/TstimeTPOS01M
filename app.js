@@ -910,7 +910,7 @@ async function printWithSMS210i(serialNumber, modelNumber, category, operation, 
         showMessage('SM-S210i用の印刷データを作成中...', 'success');
 
         const labelData = buildLabelPrintData(serialNumber, modelNumber, category, operation, purchasePrice, batteryCost, beltCost, desiredPrice);
-        const pdfBase64 = await createThermalLabelPdf(labelData, { paddingBottom: 10 * 8 });
+        const pdfBase64 = await createSms210iLabelPdf(labelData);
 
         const returnUrl = getPrintReturnUrl();
         if (!returnUrl) {
@@ -922,8 +922,8 @@ async function printWithSMS210i(serialNumber, modelNumber, category, operation, 
             'starpassprnt://v1/print/nopreview?' +
             'back=' + encodeURIComponent(returnUrl) + '&' +
             'size=2&' +
-            'cut=tearbar&' +
-            'timeout=30000&' +
+            'cut=nocut&' +
+            'timeout=300000&' +
             'popup=enable&' +
             'pdf=' + encodeURIComponent(pdfBase64);
 
@@ -1198,7 +1198,7 @@ async function renderThermalLabelCanvas(labelData, options) {
     const centerX = widthPx / 2;
     const blockGapPx = 2 * pxPerMm; // 連番・カテゴリー・型番の間隔2mm
     // 用紙を節約するため上端まで詰める。文字は上端が基準なので0でも欠けない
-    const paddingTop = 0;
+    const paddingTop = options.paddingTop != null ? options.paddingTop : 0;
     // MP-B20は排紙距離があるので余白多め。TM系はカットがあるので短くてよい
     const paddingBottom = options.paddingBottom != null ? options.paddingBottom : (14 * pxPerMm);
     const fontFamily = MPB20_FONT_FAMILY;
@@ -1375,8 +1375,10 @@ async function renderThermalLabelCanvas(labelData, options) {
 async function createThermalLabelPdf(labelData, options) {
     options = options || {};
     const paddingBottom = options.paddingBottom != null ? options.paddingBottom : (14 * 8);
+    const paddingTop = options.paddingTop != null ? options.paddingTop : 0;
     const outputCanvas = await renderThermalLabelCanvas(labelData, {
-        paddingBottom: paddingBottom
+        paddingBottom: paddingBottom,
+        paddingTop: paddingTop
     });
     const widthMm = 48;
     const imgData = outputCanvas.toDataURL('image/png');
@@ -1397,6 +1399,15 @@ async function createMPB20LabelPdf(labelData) {
     // MP-B20はサーマルヘッドから紙排出口まで距離があり、印字直後はその分が本体内に残る。
     // URL Print Agentに追加フィードを指示する手段が無いため、末尾の余白で押し出す
     return createThermalLabelPdf(labelData, { paddingBottom: 14 * 8 });
+}
+
+async function createSms210iLabelPdf(labelData) {
+    // MP-B20と同じ下部余白。PassPRNTのtearbarは追加送りで余白がぶれるため使わない（cut=nocut）。
+    // Star系は先頭の白が間引かれやすいため、上端に2mmだけ固定余白を入れて見た目を揃える
+    return createThermalLabelPdf(labelData, {
+        paddingTop: 2 * 8,
+        paddingBottom: 14 * 8
+    });
 }
 
 // Uint8ArrayをBase64へ（大きな配列でもスタックを食いすぎない）
