@@ -1593,13 +1593,9 @@ async function renderNimbotB1LabelCanvas(record) {
     const fontFamily = MPB20_FONT_FAMILY;
     const noticeSize = 13;
     const noticeLine = 16;
-    const barcodeHeight = 40;
+    const barcodeHeightTarget = 38;
     const priceSizeBase = 26;
     const headerBlock = 22;
-
-    // 下から確保する高さ（注意文が潰れないよう先に固定）
-    const bottomReserve = barcodeHeight + 4 + noticeLine * NIMBOT_NOTICE_LINES.length + 6 + (priceSizeBase + 6) + marginY;
-    const productMaxBottom = heightPx - bottomReserve;
     const productTop = marginY + headerBlock;
 
     const canvas = document.createElement('canvas');
@@ -1623,31 +1619,41 @@ async function renderNimbotB1LabelCanvas(record) {
     ctx.strokeText(String(record.displayCode || '00000000'), widthPx - marginX, marginY);
     ctx.fillText(String(record.displayCode || '00000000'), widthPx - marginX, marginY);
 
-    let y = productTop;
+    // 金額・注意文・バーコード分を先に確保し、その上に型番を収める（重なり防止）
+    const priceBlock = priceSizeBase + 8;
+    const noticeBlock = noticeLine * NIMBOT_NOTICE_LINES.length + 4;
+    const reservedBottom = priceBlock + noticeBlock + barcodeHeightTarget + marginY + 6;
+    const productAreaHeight = Math.max(18, heightPx - productTop - reservedBottom);
+
+    const modelWrap = buildNimbotModelWrap(ctx, record.modelNumber, contentWidth, fontFamily);
     const productLines = [];
     if (record.category) {
         productLines.push({ text: String(record.category), size: 13 });
     }
-
-    const modelWrap = buildNimbotModelWrap(ctx, record.modelNumber, contentWidth, fontFamily);
     modelWrap.lines.forEach(function(line) {
         productLines.push({ text: line, size: modelWrap.fontSize });
     });
-
-    // 稼働方式は型番が短いときだけ入れる（長い型番を優先）
-    if (record.operation && modelWrap.lines.length <= 3) {
+    if (record.operation && modelWrap.lines.length <= 2) {
         productLines.push({ text: String(record.operation), size: 12 });
     }
 
-    const lineStep = Math.max(15, modelWrap.fontSize + 3);
-    const maxProductLines = Math.max(2, Math.floor((productMaxBottom - productTop) / lineStep));
-    productLines.slice(0, maxProductLines).forEach(function(item) {
-        drawNimbotLeftText(ctx, item.text, marginX, y, fontFamily, item.size, 'bold');
-        y += lineStep;
-    });
+    let lineStep = Math.max(15, modelWrap.fontSize + 3);
+    let maxProductLines = Math.max(1, Math.floor(productAreaHeight / lineStep));
+    // 行数が多すぎる場合は行間を詰めて型番を優先表示
+    if (productLines.length > maxProductLines && productLines.length > 0) {
+        lineStep = Math.max(13, Math.floor(productAreaHeight / Math.min(productLines.length, 6)));
+        maxProductLines = Math.max(1, Math.floor(productAreaHeight / lineStep));
+    }
 
-    // 金額は型番の直後
-    y = Math.min(Math.max(y + 2, productTop + lineStep), productMaxBottom - (priceSizeBase + 4));
+    let y = productTop;
+    const drawnProductCount = Math.min(productLines.length, maxProductLines);
+    for (let i = 0; i < drawnProductCount; i++) {
+        drawNimbotLeftText(ctx, productLines[i].text, marginX, y, fontFamily, productLines[i].size, 'bold');
+        y += lineStep;
+    }
+
+    // 金額は必ず型番の下（上方向へ戻さない）
+    y += 3;
     const priceText = formatNimbotPriceYen(record.desiredPrice);
     let priceSize = priceSizeBase;
     ctx.font = 'bold ' + priceSize + 'px ' + fontFamily;
@@ -1655,10 +1661,16 @@ async function renderNimbotB1LabelCanvas(record) {
         priceSize -= 1;
         ctx.font = 'bold ' + priceSize + 'px ' + fontFamily;
     }
+    // 下端にはみ出す場合だけ金額を少し小さくして収める（型番側へ重ねない）
+    const minNeedAfterPrice = noticeBlock + 34 + marginY;
+    if (y + priceSize + 6 + minNeedAfterPrice > heightPx) {
+        const allowed = heightPx - minNeedAfterPrice - y - 6;
+        if (allowed >= 16) priceSize = Math.min(priceSize, allowed);
+    }
     drawNimbotLeftText(ctx, priceText, marginX, y, fontFamily, priceSize, 'bold');
     y += priceSize + 6;
 
-    // 注意文: 10pxだと潰れるので13px+縁取り
+    // 注意文
     let noticeFont = noticeSize;
     ctx.font = 'normal ' + noticeFont + 'px ' + MPB20_FONT_REGULAR_FAMILY;
     NIMBOT_NOTICE_LINES.forEach(function(line) {
@@ -1674,10 +1686,23 @@ async function renderNimbotB1LabelCanvas(record) {
     });
 
     y += 3;
-    const finalBarcodeHeight = Math.max(34, Math.min(barcodeHeight, heightPx - y - marginY));
-    const barcodeCanvas = await drawNimbotBarcodeToCanvas(record.barcodeValue, contentWidth, finalBarcodeHeight);
+    const finalBarcodeHeight = Math.max(30, Math.min(barcodeHeightTarget, heightPx - y - marginY));
+    const barcodeTop = Math.min(y, heightPx - marginY - finalBarcodeHeight);
+    // バーコードが注意文に重ならないよう、注意文下端より上には上げない
+    const safeBarcodeTop = Math.max(barcodeTop, y);
+    const barcodeCanvas = await drawNimbotBarcodeToCanvas(
+        record.barcodeValue,
+        contentWidth,
+        Math.max(30, heightPx - safeBarcodeTop - marginY)
+    );
     ctx.imageSmoothingEnabled = false;
-    ctx.drawImage(barcodeCanvas, marginX, Math.min(y, heightPx - marginY - finalBarcodeHeight), contentWidth, finalBarcodeHeight);
+    ctx.drawImage(
+        barcodeCanvas,
+        marginX,
+        safeBarcodeTop,
+        contentWidth,
+        Math.max(30, heightPx - safeBarcodeTop - marginY)
+    );
 
     await waitForNextFrame();
     return canvas;
