@@ -704,6 +704,22 @@ body {
     font-size: 0.92rem;
 }
 
+.nimbot-paper-mode {
+    margin-top: 12px;
+    padding: 12px;
+    border-radius: 14px;
+    background: #f8fafc;
+    border: 1px solid var(--border);
+}
+
+.nimbot-paper-mode[hidden] {
+    display: none !important;
+}
+
+.nimbot-paper-toggle {
+    margin-top: 8px;
+}
+
 .menu-divider {
     height: 1px;
     margin: 14px 0;

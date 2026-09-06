@@ -113,17 +113,47 @@ function updatePrinterDisplay(printer) {
 
     if (printerInfo) {
         if (printer === 'nimbotb1') {
+            const paper = loadNimbotPaperMode();
+            const paperLabel = paper === 'continuous' ? '58mm連続紙' : 'ラベル50×30';
             if (isNimbotWebBluetoothAvailable()) {
-                printerInfo.textContent = '現在: NIMBOT B1（Bluetooth直印字可）';
+                printerInfo.textContent = '現在: NIMBOT B1 / ' + paperLabel + '（Bluetooth直印字可）';
             } else if (isAppleMobileDevice()) {
-                printerInfo.textContent = '現在: NIMBOT B1（iPhoneはBluefy経由で自動印字）';
+                printerInfo.textContent = '現在: NIMBOT B1 / ' + paperLabel + '（Bluefy経由）';
             } else {
-                printerInfo.textContent = '現在: NIMBOT B1（Chrome推奨・Bluetooth直印字）';
+                printerInfo.textContent = '現在: NIMBOT B1 / ' + paperLabel;
             }
         } else {
             printerInfo.textContent = '現在: ' + printerDisplayName(printer);
         }
     }
+
+    updateNimbotPaperModeUi(printer);
+}
+
+function loadNimbotPaperMode() {
+    const saved = localStorage.getItem('nimbotPaperMode');
+    return saved === 'continuous' ? 'continuous' : 'label';
+}
+
+function saveNimbotPaperMode(mode) {
+    const normalized = mode === 'continuous' ? 'continuous' : 'label';
+    localStorage.setItem('nimbotPaperMode', normalized);
+    return normalized;
+}
+
+function updateNimbotPaperModeUi(printer) {
+    const wrap = document.getElementById('nimbotPaperMode');
+    const labelBtn = document.getElementById('nimbotPaperLabel');
+    const continuousBtn = document.getElementById('nimbotPaperContinuous');
+    if (!wrap) return;
+
+    const show = printer === 'nimbotb1';
+    wrap.hidden = !show;
+    if (!show) return;
+
+    const mode = loadNimbotPaperMode();
+    if (labelBtn) labelBtn.classList.toggle('active', mode === 'label');
+    if (continuousBtn) continuousBtn.classList.toggle('active', mode === 'continuous');
 }
 
 // ページ読み込み時の初期化
@@ -165,6 +195,23 @@ document.addEventListener('DOMContentLoaded', function() {
     document.getElementById('nimbotB1Option').addEventListener('click', function() {
         applyPrinterSelection('nimbotb1', { notify: true });
     });
+
+    const nimbotPaperLabel = document.getElementById('nimbotPaperLabel');
+    const nimbotPaperContinuous = document.getElementById('nimbotPaperContinuous');
+    if (nimbotPaperLabel) {
+        nimbotPaperLabel.addEventListener('click', function() {
+            saveNimbotPaperMode('label');
+            updatePrinterDisplay('nimbotb1');
+            showMessage('NIMBOT用紙をラベル50×30に設定しました', 'success');
+        });
+    }
+    if (nimbotPaperContinuous) {
+        nimbotPaperContinuous.addEventListener('click', function() {
+            saveNimbotPaperMode('continuous');
+            updatePrinterDisplay('nimbotb1');
+            showMessage('NIMBOT用紙を58mm連続紙（試作）に設定しました', 'success');
+        });
+    }
     
     // ハンバーガーメニューの設定
     const hamburgerMenu = document.getElementById('hamburgerMenu');
@@ -1017,7 +1064,19 @@ const NIMBOT_B1_MODEL = {
     protocol: 'v4',
     task: 'b1',
     density: 3,
-    label_type: 1,
+    label_type: 1, // ギャップラベル
+    speed: 1,
+    name_prefixes: ['B1']
+};
+// 連続紙（レシート用紙）試作。label_type=3。実印字幅は約48mmのまま。
+const NIMBOT_B1_CONTINUOUS_MODEL = {
+    label: 'Niimbot B1 Continuous',
+    id: 4096,
+    dpi: 203,
+    protocol: 'v4',
+    task: 'b1',
+    density: 3,
+    label_type: 3,
     speed: 1,
     name_prefixes: ['B1']
 };
@@ -1032,6 +1091,7 @@ const NIMBOT_B1_SIZE = {
     offset_y_px: 4,
     dpi: 203
 };
+const NIMBOT_B1_MAX_CONTINUOUS_HEIGHT_PX = 1600; // 約200mm。これ以上は切り詰め
 
 function isNimbotWebBluetoothAvailable() {
     return !!(window.Niimbot && typeof Niimbot.isSupported === 'function' && Niimbot.isSupported());
@@ -1059,6 +1119,7 @@ function buildNimbotAutoprintPageUrl(serialNumber, modelNumber, category, operat
     params.set('notice', document.getElementById('printNotice') && document.getElementById('printNotice').checked ? '1' : '0');
     // Bluefy印字後の戻り先（Safari / ホーム画面アプリ）
     params.set('back', getHttpsAppUrl());
+    params.set('paper', loadNimbotPaperMode());
     url.search = params.toString();
     return url.toString();
 }
@@ -1146,6 +1207,9 @@ function maybeHandleNimbotAutoprintFromUrl() {
 
     const backUrl = params.get('back') || getHttpsAppUrl();
     window.__nimbotReturnHttps = backUrl;
+    if (params.get('paper') === 'continuous' || params.get('paper') === 'label') {
+        saveNimbotPaperMode(params.get('paper'));
+    }
 
     applyPrinterSelection('nimbotb1', { notify: false });
     fillFormFromNimbotAutoprintParams(params);
@@ -1254,6 +1318,7 @@ async function printWithNimbotB1(serialNumber, modelNumber, category, operation,
     // 確認ダイアログは出さない（ポップアップ過多対策）。Bluefy起動も即実行する。
     try {
         const canBlePrint = isNimbotWebBluetoothAvailable();
+        const paperMode = loadNimbotPaperMode();
 
         if (!canBlePrint && isAppleMobileDevice() && !options.fromAutoprint) {
             const pageUrl = buildNimbotAutoprintPageUrl(
@@ -1273,24 +1338,72 @@ async function printWithNimbotB1(serialNumber, modelNumber, category, operation,
             );
         }
 
-        if (typeof JsBarcode === 'undefined') {
-            throw new Error('バーコードライブラリの読み込みに失敗しました');
+        showMessage(
+            paperMode === 'continuous'
+                ? 'NIMBOT B1（58mm連続紙・試作）へ印字中...'
+                : 'NIMBOT B1へ印字中...',
+            'success'
+        );
+
+        let canvas;
+        let model;
+        let size;
+        let historyExtra = { printer: 'nimbotb1', paperMode: paperMode };
+
+        if (paperMode === 'continuous') {
+            // いつもの値札レイアウトを384幅で描き、連続紙として送る
+            if (typeof QRCode === 'undefined') {
+                throw new Error('QRコードライブラリの読み込みに失敗しました');
+            }
+            const labelData = buildLabelPrintData(
+                serialNumber, modelNumber, category, operation,
+                purchasePrice, batteryCost, beltCost, desiredPrice
+            );
+            canvas = await renderThermalLabelCanvas(labelData, {
+                paddingTop: 2 * 8,
+                paddingBottom: 12 * 8,
+                supersample: 3
+            });
+            if (canvas.width !== 384) {
+                throw new Error('連続紙用画像幅が不正です: ' + canvas.width);
+            }
+            if (canvas.height > NIMBOT_B1_MAX_CONTINUOUS_HEIGHT_PX) {
+                throw new Error(
+                    '印字内容が長すぎます（約' + Math.round(canvas.height / 8) + 'mm）。型番を短くしてください'
+                );
+            }
+            model = NIMBOT_B1_CONTINUOUS_MODEL;
+            size = {
+                label: '58mm continuous (printable 48mm)',
+                w_mm: 48,
+                h_mm: canvas.height / 8,
+                w_px: 384,
+                h_px: canvas.height,
+                margin: 0,
+                offset_y_px: 0,
+                dpi: 203
+            };
+        } else {
+            if (typeof JsBarcode === 'undefined') {
+                throw new Error('バーコードライブラリの読み込みに失敗しました');
+            }
+            const barcodeRecord = createNimbotBarcodeRecord(
+                serialNumber, modelNumber, category, operation,
+                purchasePrice, batteryCost, beltCost, desiredPrice
+            );
+            saveNimbotBarcodeRecord(barcodeRecord);
+            canvas = await renderNimbotB1LabelCanvas(barcodeRecord);
+            model = NIMBOT_B1_MODEL;
+            size = NIMBOT_B1_SIZE;
+            historyExtra.barcodeId = barcodeRecord.barcodeId;
+            historyExtra.barcodeValue = barcodeRecord.barcodeValue;
         }
 
-        showMessage('NIMBOT B1へ印字中...', 'success');
-
-        const barcodeRecord = createNimbotBarcodeRecord(
-            serialNumber, modelNumber, category, operation,
-            purchasePrice, batteryCost, beltCost, desiredPrice
-        );
-        saveNimbotBarcodeRecord(barcodeRecord);
-
-        const canvas = await renderNimbotB1LabelCanvas(barcodeRecord);
         const pngDataUrl = canvas.toDataURL('image/png');
 
         await Niimbot.printImage(pngDataUrl, {
-            model: NIMBOT_B1_MODEL,
-            size: NIMBOT_B1_SIZE,
+            model: model,
+            size: size,
             density: 3,
             onProgress: function(status) {
                 if (status && status !== 'ok' && status !== 'connecting…') {
@@ -1299,16 +1412,18 @@ async function printWithNimbotB1(serialNumber, modelNumber, category, operation,
             }
         });
 
-        saveToHistory(serialNumber, modelNumber, category, operation, purchasePrice, batteryCost, beltCost, desiredPrice, {
-            barcodeId: barcodeRecord.barcodeId,
-            barcodeValue: barcodeRecord.barcodeValue,
-            printer: 'nimbotb1'
-        });
+        saveToHistory(serialNumber, modelNumber, category, operation, purchasePrice, batteryCost, beltCost, desiredPrice, historyExtra);
         const newSerial = parseInt(serialNumber, 10) + 1;
         saveSerialNumber(newSerial);
         updateSerialDisplay();
         updatePreview();
-        showMessage('NIMBOT B1へ印字しました。連番を ' + newSerial + ' に更新しました。', 'success');
+        showMessage(
+            (paperMode === 'continuous'
+                ? 'NIMBOT B1（連続紙）へ印字しました。'
+                : 'NIMBOT B1へ印字しました。') +
+            '連番を ' + newSerial + ' に更新しました。',
+            'success'
+        );
 
         if (options.fromAutoprint) {
             returnAfterNimbotBluefyPrint();

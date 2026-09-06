@@ -17,7 +17,7 @@
     <link rel="icon" type="image/png" sizes="192x192" href="icons/icon-192.png">
     <link rel="icon" type="image/png" sizes="512x512" href="icons/icon-512.png">
     <!-- 更新が端末のキャッシュに阻まれないよう、修正のたびにこの番号を上げる -->
-    <link rel="stylesheet" href="style.css?v=20260906g">
+    <link rel="stylesheet" href="style.css?v=20260906h">
 </head>
 <body>
     <div class="container">
@@ -60,6 +60,18 @@
                         </button>
                     </div>
                     <p class="printer-info" id="printerInfo">現在: TM Print Assistant</p>
+                    <div class="nimbot-paper-mode" id="nimbotPaperMode" hidden>
+                        <p class="menu-info">NIMBOT用紙モード（試作）:</p>
+                        <div class="printer-toggle nimbot-paper-toggle">
+                            <button type="button" class="printer-option active" id="nimbotPaperLabel" data-nimbot-paper="label">
+                                ラベル 50×30
+                            </button>
+                            <button type="button" class="printer-option" id="nimbotPaperContinuous" data-nimbot-paper="continuous">
+                                58mm連続紙
+                            </button>
+                        </div>
+                        <p class="menu-info menu-info-sub">連続紙は印字幅約48mmです。紙送りは実機次第です。</p>
+                    </div>
                 </div>
                 
                 <div class="menu-divider"></div>
@@ -262,7 +274,7 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.11.6/dist/JsBarcode.all.min.js"></script>
     <script src="epos-2.27.0.js" onerror="console.warn('ePOS SDK not loaded')"></script>
-    <script src="niimbot.js?v=20260906g"></script>
-    <script src="app.js?v=20260906g"></script>
+    <script src="niimbot.js?v=20260906h"></script>
+    <script src="app.js?v=20260906h"></script>
 </body>
 </html>
