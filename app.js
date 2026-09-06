@@ -1362,7 +1362,8 @@ async function printWithNimbotB1(serialNumber, modelNumber, category, operation,
             canvas = await renderThermalLabelCanvas(labelData, {
                 paddingTop: 2 * 8,
                 paddingBottom: 12 * 8,
-                supersample: 3
+                supersample: 3,
+                inkThreshold: NIMBOT_INK_THRESHOLD
             });
             if (canvas.width !== 384) {
                 throw new Error('連続紙用画像幅が不正です: ' + canvas.width);
@@ -1404,7 +1405,7 @@ async function printWithNimbotB1(serialNumber, modelNumber, category, operation,
         await Niimbot.printImage(pngDataUrl, {
             model: model,
             size: size,
-            density: 3,
+            density: 2,
             onProgress: function(status) {
                 if (status && status !== 'ok' && status !== 'connecting…') {
                     showMessage('NIMBOT B1: ' + status, 'success');
@@ -1651,8 +1652,8 @@ function drawNimbotLeftText(ctx, text, x, y, fontFamily, size, weight) {
     ctx.miterLimit = 2;
     ctx.strokeStyle = '#000000';
     ctx.fillStyle = '#000000';
-    // 拡大描画前提。縁取りをやや太めにして二値化後の欠けを防ぐ
-    ctx.lineWidth = size >= 18 ? 0.7 : (size >= 14 ? 0.85 : 1.0);
+    // 欠け防止の縁取りは最小限にして、印字が濃くなりすぎないようにする
+    ctx.lineWidth = size >= 18 ? 0.35 : 0.45;
     const xx = Math.round(x);
     const yy = Math.round(y);
     ctx.strokeText(text, xx, yy);
@@ -1743,7 +1744,7 @@ async function renderNimbotB1LabelCanvas(record) {
     hiCtx.textAlign = 'right';
     hiCtx.textBaseline = 'top';
     hiCtx.lineJoin = 'round';
-    hiCtx.lineWidth = 0.85;
+    hiCtx.lineWidth = 0.4;
     hiCtx.strokeStyle = '#000';
     hiCtx.fillStyle = '#000';
     hiCtx.strokeText(String(record.displayCode || '00000000'), widthPx - marginX, marginY);
@@ -1799,18 +1800,18 @@ async function renderNimbotB1LabelCanvas(record) {
     drawNimbotLeftText(hiCtx, priceText, marginX, y, fontFamily, priceSize, 'bold');
     y += priceSize + 6;
 
-    // 注意文はBold+縁取りで潰れにくくする
+    // 注意文は通常ウェイト（太字だと濃くなりすぎる）
     let noticeFont = noticeSize;
-    measureCtx.font = 'bold ' + noticeFont + 'px ' + MPB20_FONT_REGULAR_FAMILY;
+    measureCtx.font = 'normal ' + noticeFont + 'px ' + MPB20_FONT_REGULAR_FAMILY;
     NIMBOT_NOTICE_LINES.forEach(function(line) {
         while (noticeFont > 12 && measureCtx.measureText(line).width > contentWidth) {
             noticeFont -= 1;
-            measureCtx.font = 'bold ' + noticeFont + 'px ' + MPB20_FONT_REGULAR_FAMILY;
+            measureCtx.font = 'normal ' + noticeFont + 'px ' + MPB20_FONT_REGULAR_FAMILY;
         }
     });
     const noticeStep = Math.max(16, noticeFont + 3);
     NIMBOT_NOTICE_LINES.forEach(function(line) {
-        drawNimbotLeftText(hiCtx, line, marginX, y, MPB20_FONT_REGULAR_FAMILY, noticeFont, 'bold');
+        drawNimbotLeftText(hiCtx, line, marginX, y, MPB20_FONT_REGULAR_FAMILY, noticeFont, 'normal');
         y += noticeStep;
     });
 
@@ -1819,12 +1820,13 @@ async function renderNimbotB1LabelCanvas(record) {
     const barcodeHeight = Math.max(30, heightPx - barcodeTop - marginY);
 
     // 文字だけドット化（バーコードは後から等倍で重ねる）
+    // 閾値を下げてグレー縁を黒にしすぎない（濃さ対策）
     const outputCanvas = document.createElement('canvas');
     outputCanvas.width = widthPx;
     outputCanvas.height = heightPx;
     const outputCtx = outputCanvas.getContext('2d');
     const outputImage = outputCtx.createImageData(widthPx, heightPx);
-    reduceBandToDots(hiCtx, supersample, 0, widthPx, heightPx, outputImage, 0);
+    reduceBandToDots(hiCtx, supersample, 0, widthPx, heightPx, outputImage, 0, NIMBOT_INK_THRESHOLD);
     outputCtx.putImageData(outputImage, 0, 0);
 
     const barcodeCanvas = await drawNimbotBarcodeToCanvas(record.barcodeValue, contentWidth, barcodeHeight);
@@ -1952,12 +1954,15 @@ function applyMpb20Font(ctx, fontFamily, size, weight) {
 // 濃いめに倒すと画数の多い漢字の隙間が埋まり、サーマルのにじみと合わさって潰れる。
 // ドットの半分以上が掛かったところだけ黒にする
 const MPB20_INK_THRESHOLD = 140;
+// NIMBOTは二値化が強めなので、閾値を下げて印字の黒つぶれを抑える
+const NIMBOT_INK_THRESHOLD = 110;
 
-function reduceBandToDots(bandCtx, supersample, sourceTop, widthPx, height, outputImage, outputTop) {
+function reduceBandToDots(bandCtx, supersample, sourceTop, widthPx, height, outputImage, outputTop, inkThreshold) {
     const sourceWidth = widthPx * supersample;
     const source = bandCtx.getImageData(0, sourceTop, sourceWidth, height * supersample).data;
     const output = outputImage.data;
     const samples = supersample * supersample;
+    const threshold = inkThreshold != null ? inkThreshold : MPB20_INK_THRESHOLD;
 
     for (let y = 0; y < height; y++) {
         for (let x = 0; x < widthPx; x++) {
@@ -1970,7 +1975,7 @@ function reduceBandToDots(bandCtx, supersample, sourceTop, widthPx, height, outp
                 }
             }
 
-            const value = (total / samples) < MPB20_INK_THRESHOLD ? 0 : 255;
+            const value = (total / samples) < threshold ? 0 : 255;
             const target = ((outputTop + y) * widthPx + x) * 4;
             output[target] = value;
             output[target + 1] = value;
@@ -2253,7 +2258,7 @@ async function renderThermalLabelCanvas(labelData, options) {
         bandCtx.fillStyle = '#000000';
         drawLabel(bandCtx);
 
-        reduceBandToDots(bandCtx, supersample, bandMargin * supersample, widthPx, height, outputImage, top);
+        reduceBandToDots(bandCtx, supersample, bandMargin * supersample, widthPx, height, outputImage, top, options.inkThreshold);
     }
 
     outputCtx.putImageData(outputImage, 0, 0);
