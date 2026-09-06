@@ -1485,15 +1485,63 @@ function formatNimbotPriceYen(price) {
     return '¥' + num.toLocaleString('ja-JP') + '-';
 }
 
-function buildNimbotProductLines(record) {
+function wrapNimbotTextByWidth(ctx, text, maxWidth, fontFamily, size, weight) {
+    const raw = String(text || '').replace(/\s+/g, ' ').trim();
+    if (!raw) return [];
+    ctx.font = weight + ' ' + Math.round(size) + 'px ' + fontFamily;
+    const chars = Array.from(raw);
     const lines = [];
-    if (record.category) lines.push(String(record.category));
-    String(record.modelNumber || '').split(/\n+/).forEach(function(line) {
-        const t = line.trim();
-        if (t) lines.push(t);
-    });
-    if (record.operation) lines.push(String(record.operation));
-    return lines.slice(0, 3);
+    let current = '';
+    for (let i = 0; i < chars.length; i++) {
+        const trial = current + chars[i];
+        if (current && ctx.measureText(trial).width > maxWidth) {
+            lines.push(current);
+            current = chars[i];
+        } else {
+            current = trial;
+        }
+    }
+    if (current) lines.push(current);
+    return lines;
+}
+
+function buildNimbotModelWrap(ctx, modelNumber, maxWidth, fontFamily) {
+    const sourceLines = String(modelNumber || '').split(/\n+/).map(function(s) {
+        return s.trim();
+    }).filter(Boolean);
+
+    let fontSize = 14;
+    let lines = [];
+    for (; fontSize >= 11; fontSize--) {
+        lines = [];
+        sourceLines.forEach(function(src) {
+            wrapNimbotTextByWidth(ctx, src, maxWidth, fontFamily, fontSize, 'bold').forEach(function(line) {
+                lines.push(line);
+            });
+        });
+        if (lines.length <= 5) break;
+    }
+    return { lines: lines.slice(0, 6), fontSize: fontSize };
+}
+
+function drawNimbotLeftText(ctx, text, x, y, fontFamily, size, weight) {
+    if (!text) return;
+    ctx.font = weight + ' ' + Math.round(size) + 'px ' + fontFamily;
+    ctx.textAlign = 'left';
+    ctx.textBaseline = 'top';
+    if ('textRendering' in ctx) {
+        ctx.textRendering = 'geometricPrecision';
+    }
+    ctx.lineJoin = 'round';
+    ctx.miterLimit = 2;
+    ctx.strokeStyle = '#000000';
+    ctx.fillStyle = '#000000';
+    // 小さい字でもサーマルで欠けないよう、わずかに縁取りする
+    ctx.lineWidth = size >= 13 ? 0.55 : 0.75;
+    const xx = Math.round(x);
+    const yy = Math.round(y);
+    ctx.strokeText(text, xx, yy);
+    ctx.fillText(text, xx, yy);
 }
 
 function drawNimbotBarcodeToCanvas(barcodeValue, maxWidth, height) {
@@ -1543,6 +1591,16 @@ async function renderNimbotB1LabelCanvas(record) {
     const marginY = 6;
     const contentWidth = widthPx - marginX * 2;
     const fontFamily = MPB20_FONT_FAMILY;
+    const noticeSize = 13;
+    const noticeLine = 16;
+    const barcodeHeight = 40;
+    const priceSizeBase = 26;
+    const headerBlock = 22;
+
+    // 下から確保する高さ（注意文が潰れないよう先に固定）
+    const bottomReserve = barcodeHeight + 4 + noticeLine * NIMBOT_NOTICE_LINES.length + 6 + (priceSizeBase + 6) + marginY;
+    const productMaxBottom = heightPx - bottomReserve;
+    const productTop = marginY + headerBlock;
 
     const canvas = document.createElement('canvas');
     canvas.width = widthPx;
@@ -1554,55 +1612,72 @@ async function renderNimbotB1LabelCanvas(record) {
     ctx.textBaseline = 'top';
 
     // 上段: 左 T's time / 右 8桁
-    ctx.font = 'bold 18px ' + MPB20_HEADER_FONT_FAMILY;
-    ctx.textAlign = 'left';
-    ctx.fillText("T's time", marginX, marginY);
+    drawNimbotLeftText(ctx, "T's time", marginX, marginY, MPB20_HEADER_FONT_FAMILY, 18, 'bold');
     ctx.font = 'bold 18px ' + fontFamily;
     ctx.textAlign = 'right';
+    ctx.textBaseline = 'top';
+    ctx.lineJoin = 'round';
+    ctx.lineWidth = 0.55;
+    ctx.strokeStyle = '#000';
+    ctx.fillStyle = '#000';
+    ctx.strokeText(String(record.displayCode || '00000000'), widthPx - marginX, marginY);
     ctx.fillText(String(record.displayCode || '00000000'), widthPx - marginX, marginY);
 
-    let y = marginY + 24;
-    const productLines = buildNimbotProductLines(record);
-    while (productLines.length < 3) productLines.push('');
+    let y = productTop;
+    const productLines = [];
+    if (record.category) {
+        productLines.push({ text: String(record.category), size: 13 });
+    }
 
-    productLines.slice(0, 3).forEach(function(line) {
-        if (line) {
-            let fontSize = 14;
-            ctx.font = 'bold ' + fontSize + 'px ' + fontFamily;
-            while (fontSize > 10 && ctx.measureText(line).width > contentWidth) {
-                fontSize -= 1;
-                ctx.font = 'bold ' + fontSize + 'px ' + fontFamily;
-            }
-            ctx.textAlign = 'left';
-            ctx.fillText(line, marginX, y);
-        }
-        y += 17;
+    const modelWrap = buildNimbotModelWrap(ctx, record.modelNumber, contentWidth, fontFamily);
+    modelWrap.lines.forEach(function(line) {
+        productLines.push({ text: line, size: modelWrap.fontSize });
     });
 
-    y += 2;
+    // 稼働方式は型番が短いときだけ入れる（長い型番を優先）
+    if (record.operation && modelWrap.lines.length <= 3) {
+        productLines.push({ text: String(record.operation), size: 12 });
+    }
+
+    const lineStep = Math.max(15, modelWrap.fontSize + 3);
+    const maxProductLines = Math.max(2, Math.floor((productMaxBottom - productTop) / lineStep));
+    productLines.slice(0, maxProductLines).forEach(function(item) {
+        drawNimbotLeftText(ctx, item.text, marginX, y, fontFamily, item.size, 'bold');
+        y += lineStep;
+    });
+
+    // 金額は型番の直後
+    y = Math.min(Math.max(y + 2, productTop + lineStep), productMaxBottom - (priceSizeBase + 4));
     const priceText = formatNimbotPriceYen(record.desiredPrice);
-    let priceSize = 26;
+    let priceSize = priceSizeBase;
     ctx.font = 'bold ' + priceSize + 'px ' + fontFamily;
     while (priceSize > 16 && ctx.measureText(priceText).width > contentWidth) {
         priceSize -= 1;
         ctx.font = 'bold ' + priceSize + 'px ' + fontFamily;
     }
-    ctx.textAlign = 'left';
-    ctx.fillText(priceText, marginX, y);
+    drawNimbotLeftText(ctx, priceText, marginX, y, fontFamily, priceSize, 'bold');
     y += priceSize + 6;
 
-    ctx.font = '10px ' + MPB20_FONT_REGULAR_FAMILY;
-    ctx.textAlign = 'left';
+    // 注意文: 10pxだと潰れるので13px+縁取り
+    let noticeFont = noticeSize;
+    ctx.font = 'normal ' + noticeFont + 'px ' + MPB20_FONT_REGULAR_FAMILY;
     NIMBOT_NOTICE_LINES.forEach(function(line) {
-        ctx.fillText(line, marginX, y);
-        y += 12;
+        while (noticeFont > 11 && ctx.measureText(line).width > contentWidth) {
+            noticeFont -= 1;
+            ctx.font = 'normal ' + noticeFont + 'px ' + MPB20_FONT_REGULAR_FAMILY;
+        }
+    });
+    const noticeStep = Math.max(15, noticeFont + 3);
+    NIMBOT_NOTICE_LINES.forEach(function(line) {
+        drawNimbotLeftText(ctx, line, marginX, y, MPB20_FONT_REGULAR_FAMILY, noticeFont, 'normal');
+        y += noticeStep;
     });
 
-    y += 4;
-    const barcodeHeight = Math.max(36, Math.min(52, heightPx - y - marginY));
-    const barcodeCanvas = await drawNimbotBarcodeToCanvas(record.barcodeValue, contentWidth, barcodeHeight);
+    y += 3;
+    const finalBarcodeHeight = Math.max(34, Math.min(barcodeHeight, heightPx - y - marginY));
+    const barcodeCanvas = await drawNimbotBarcodeToCanvas(record.barcodeValue, contentWidth, finalBarcodeHeight);
     ctx.imageSmoothingEnabled = false;
-    ctx.drawImage(barcodeCanvas, marginX, y, contentWidth, barcodeHeight);
+    ctx.drawImage(barcodeCanvas, marginX, Math.min(y, heightPx - marginY - finalBarcodeHeight), contentWidth, finalBarcodeHeight);
 
     await waitForNextFrame();
     return canvas;
