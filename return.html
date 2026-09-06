@@ -137,28 +137,65 @@
             var target = params.get('to') || 'webapp://toki01t.github.io/TstimeTPOS01M/';
             var alternate = params.get('alt') || '';
             var shortcutName = params.get('sc') || 'Tstime';
+            var fromNimbot = params.get('from') === 'nimbot';
             var shortcutUrl = 'shortcuts://run-shortcut?name=' + encodeURIComponent(shortcutName);
+
+            function toXSafari(url) {
+                if (!url) return '';
+                if (/^https:\/\//i.test(url)) return 'x-safari-' + url;
+                if (/^http:\/\//i.test(url)) return 'x-safari-' + url;
+                return url;
+            }
+
+            // Bluefy内のhttpsはBluefyに残るので、Safari戻りは x-safari-https を優先
+            var safariTarget = '';
+            if (/^x-safari-/i.test(alternate)) {
+                safariTarget = alternate;
+            } else if (/^https?:\/\//i.test(alternate)) {
+                safariTarget = toXSafari(alternate);
+            } else if (/^https?:\/\//i.test(target)) {
+                safariTarget = toXSafari(target);
+            }
 
             var retry = document.getElementById('retry');
             var retryAlt = document.getElementById('retryAlt');
             var viaShortcut = document.getElementById('viaShortcut');
 
-            retry.href = target || '#';
-            retryAlt.href = alternate || '#';
-            if (!alternate || alternate === target) retryAlt.style.display = 'none';
+            // 主ボタン: Safari戻り（Bluefyから）/ webapp://（ホーム画面）
+            retry.href = safariTarget || target || '#';
+            retry.textContent = safariTarget ? 'Safariに戻る' : '直接アプリに戻る';
+
+            retryAlt.href = alternate && alternate !== retry.href ? alternate : (target !== retry.href ? target : '#');
+            if (!retryAlt.href || retryAlt.href === '#' || retryAlt.getAttribute('href') === retry.getAttribute('href')) {
+                retryAlt.style.display = 'none';
+            } else {
+                retryAlt.textContent = '別の形式で戻る';
+            }
 
             viaShortcut.href = shortcutUrl;
             document.getElementById('scName').textContent = shortcutName;
             document.getElementById('webappUrl').textContent = target;
             document.getElementById('target').textContent = shortcutUrl;
 
-            // 印刷完了後はボタンを待たず、すぐショートカットを開く
-            window.location.replace(shortcutUrl);
+            if (fromNimbot) {
+                document.querySelector('h1').textContent = 'NIMBOT印字が完了しました';
+                document.getElementById('status').textContent = '元のアプリへ戻しています…';
+            }
+
+            // Bluefyからの場合は Safari を先に試し、続けてショートカット
+            if (fromNimbot && safariTarget) {
+                window.location.replace(safariTarget);
+                setTimeout(function () {
+                    window.location.href = shortcutUrl;
+                }, 1200);
+            } else {
+                window.location.replace(shortcutUrl);
+            }
 
             setTimeout(function () {
                 document.getElementById('status').textContent =
                     '自動で開けませんでした。下のボタンからお戻りください。';
-            }, 1500);
+            }, 1800);
         })();
     </script>
 </body>

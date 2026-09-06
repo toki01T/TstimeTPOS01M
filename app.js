@@ -1029,6 +1029,8 @@ function buildNimbotAutoprintPageUrl(serialNumber, modelNumber, category, operat
     params.set('price3', String(beltCost || ''));
     params.set('price4', String(desiredPrice || ''));
     params.set('notice', document.getElementById('printNotice') && document.getElementById('printNotice').checked ? '1' : '0');
+    // Bluefy印字後の戻り先（Safari / ホーム画面アプリ）
+    params.set('back', getHttpsAppUrl());
     url.search = params.toString();
     return url.toString();
 }
@@ -1114,6 +1116,9 @@ function maybeHandleNimbotAutoprintFromUrl() {
     const params = new URLSearchParams(window.location.search);
     if (params.get('autoprint') !== 'nimbotb1') return false;
 
+    const backUrl = params.get('back') || getHttpsAppUrl();
+    window.__nimbotReturnHttps = backUrl;
+
     applyPrinterSelection('nimbotb1', { notify: false });
     fillFormFromNimbotAutoprintParams(params);
     clearUrlParams();
@@ -1146,6 +1151,83 @@ function maybeHandleNimbotAutoprintFromUrl() {
         );
     }, 600);
     return true;
+}
+
+function toXSafariUrl(url) {
+    if (!url) return '';
+    if (/^https:\/\//i.test(url)) return 'x-safari-' + url;
+    if (/^http:\/\//i.test(url)) return 'x-safari-' + url;
+    return url;
+}
+
+function buildNimbotReturnPageUrl(httpsUrl) {
+    const page = new URL('return.html', window.location.href);
+    const webApps = buildWebAppReturnUrls();
+    // return.html はショートカット優先。Safari戻りは x-safari-https を alt に渡す
+    page.searchParams.set('to', webApps.primary);
+    page.searchParams.set('alt', toXSafariUrl(httpsUrl || getHttpsAppUrl()));
+    page.searchParams.set('sc', RETURN_SHORTCUT_NAME);
+    page.searchParams.set('from', 'nimbot');
+    return page.toString();
+}
+
+function showNimbotReturnOverlay(links) {
+    let overlay = document.getElementById('nimbotReturnOverlay');
+    if (!overlay) {
+        overlay = document.createElement('div');
+        overlay.id = 'nimbotReturnOverlay';
+        overlay.className = 'nimbot-return-overlay';
+        overlay.innerHTML =
+            '<div class="nimbot-return-card">' +
+            '<h2>印字完了</h2>' +
+            '<p>元のWebアプリへ戻ります。自動で戻らない場合は下のボタンを押してください。</p>' +
+            '<a class="nimbot-return-btn" id="nimbotReturnSafari" href="#">Safari / アプリに戻る</a>' +
+            '<a class="nimbot-return-btn secondary" id="nimbotReturnShortcut" href="#">ショートカットで戻る</a>' +
+            '<button type="button" class="nimbot-return-btn secondary" id="nimbotReturnClose">閉じる</button>' +
+            '</div>';
+        document.body.appendChild(overlay);
+        document.getElementById('nimbotReturnClose').addEventListener('click', function() {
+            overlay.classList.remove('is-visible');
+        });
+    }
+
+    const safariBtn = document.getElementById('nimbotReturnSafari');
+    const shortcutBtn = document.getElementById('nimbotReturnShortcut');
+    safariBtn.href = links.safari || links.https || '#';
+    shortcutBtn.href = links.shortcut || '#';
+    overlay.classList.add('is-visible');
+}
+
+function returnAfterNimbotBluefyPrint() {
+    const httpsUrl = window.__nimbotReturnHttps || getHttpsAppUrl();
+    const safariUrl = toXSafariUrl(httpsUrl);
+    const shortcutUrl = getShortcutReturnUrl();
+    const returnPage = buildNimbotReturnPageUrl(httpsUrl);
+
+    showMessage('印字完了。元のアプリへ戻ります...', 'success');
+    showNimbotReturnOverlay({
+        safari: safariUrl,
+        shortcut: shortcutUrl,
+        https: httpsUrl
+    });
+
+    // 1) Safariへ直接戻す（Bluefy内のhttps遷移だとBluefyに残るため x-safari-https を使う）
+    setTimeout(function() {
+        try {
+            window.location.href = safariUrl;
+        } catch (e) {
+            console.warn('Safari戻り失敗', e);
+        }
+    }, 700);
+
+    // 2) だめなら return.html（ショートカット経由）へ
+    setTimeout(function() {
+        try {
+            window.location.href = returnPage;
+        } catch (e) {
+            console.warn('return.html遷移失敗', e);
+        }
+    }, 2200);
 }
 
 async function printWithNimbotB1(serialNumber, modelNumber, category, operation, purchasePrice, batteryCost, beltCost, desiredPrice, options) {
@@ -1212,6 +1294,11 @@ async function printWithNimbotB1(serialNumber, modelNumber, category, operation,
         updateSerialDisplay();
         updatePreview();
         showMessage('NIMBOT B1へ印字しました。連番を ' + newSerial + ' に更新しました。', 'success');
+
+        // Bluefyから起動した印字なら、Safari / ホーム画面アプリへ戻す
+        if (options.fromAutoprint || isAppleMobileDevice()) {
+            returnAfterNimbotBluefyPrint();
+        }
     } catch (error) {
         console.error('=== NIMBOT B1印刷エラー ===', error);
         const msg = (error && error.message) ? error.message : String(error);
