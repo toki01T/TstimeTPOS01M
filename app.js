@@ -112,14 +112,28 @@ function updatePrinterDisplay(printer) {
     }
 
     if (printerInfo) {
-        printerInfo.textContent = '現在: ' + printerDisplayName(printer);
+        if (printer === 'nimbotb1') {
+            if (isNimbotWebBluetoothAvailable()) {
+                printerInfo.textContent = '現在: NIMBOT B1（Bluetooth直印字可）';
+            } else if (isAppleMobileDevice()) {
+                printerInfo.textContent = '現在: NIMBOT B1（iPhoneはBluefy経由で自動印字）';
+            } else {
+                printerInfo.textContent = '現在: NIMBOT B1（Chrome推奨・Bluetooth直印字）';
+            }
+        } else {
+            printerInfo.textContent = '現在: ' + printerDisplayName(printer);
+        }
     }
 }
 
 // ページ読み込み時の初期化
 document.addEventListener('DOMContentLoaded', function() {
-    // URLパラメータから値札データを読み込む
-    loadFromURL();
+    // NIMBOT B1の自動印字（Bluefy等からの復帰）を先に処理
+    const autoPrinted = maybeHandleNimbotAutoprintFromUrl();
+    if (!autoPrinted) {
+        // URLパラメータから値札データを読み込む
+        loadFromURL();
+    }
     
     // 保存された連番を読み込む（内部管理のみ）
     const savedSerial = loadSerialNumber();
@@ -965,8 +979,9 @@ async function printWithSMS210i(serialNumber, modelNumber, category, operation, 
     }
 }
 
-// NIMBOT B1（Web Bluetooth直印字）。公式アプリURLスキームが無いためブラウザからBLEで送る。
-// 用紙は当面 50×30mm（203dpi / 384×240）。印字配置は仮レイアウトで、添付後に合わせる。
+// NIMBOT B1（Web Bluetooth直印字）。
+// MP-B20/SM-S210iのような公式URLスキーム仲介アプリは無い。
+// Android Chrome / PC Chrome / iPhoneのBluefyなら1タップで自動印字できる。
 const NIMBOT_B1_MODEL = {
     label: 'Niimbot B1',
     id: 4096,
@@ -994,14 +1009,184 @@ function isNimbotWebBluetoothAvailable() {
     return !!(window.Niimbot && typeof Niimbot.isSupported === 'function' && Niimbot.isSupported());
 }
 
-async function printWithNimbotB1(serialNumber, modelNumber, category, operation, purchasePrice, batteryCost, beltCost, desiredPrice) {
+function isAppleMobileDevice() {
+    const ua = navigator.userAgent.toLowerCase();
+    return /iphone|ipad|ipod/.test(ua) ||
+        (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+}
+
+function buildNimbotAutoprintPageUrl(serialNumber, modelNumber, category, operation, purchasePrice, batteryCost, beltCost, desiredPrice) {
+    const url = new URL(window.location.href);
+    url.hash = '';
+    const params = new URLSearchParams();
+    params.set('autoprint', 'nimbotb1');
+    params.set('serial', String(serialNumber || ''));
+    params.set('model', String(modelNumber || ''));
+    params.set('category', String(category || ''));
+    params.set('operation', String(operation || ''));
+    params.set('price1', String(purchasePrice || ''));
+    params.set('price2', String(batteryCost || ''));
+    params.set('price3', String(beltCost || ''));
+    params.set('price4', String(desiredPrice || ''));
+    params.set('notice', document.getElementById('printNotice') && document.getElementById('printNotice').checked ? '1' : '0');
+    url.search = params.toString();
+    return url.toString();
+}
+
+function openNimbotPrintInBluefy(pageUrl) {
+    // BluefyはiOS向けWeb Bluetooth対応ブラウザ。SafariからはこのURLで起動できる
+    window.location.href = 'bluefy://open?url=' + encodeURIComponent(pageUrl);
+}
+
+function fillFormFromNimbotAutoprintParams(params) {
+    const modelEl = document.getElementById('modelNumber');
+    const desiredEl = document.getElementById('desiredPrice');
+    const purchaseEl = document.getElementById('purchasePrice');
+    const batteryEl = document.getElementById('batteryCost');
+    const beltEl = document.getElementById('beltCost');
+    const noticeEl = document.getElementById('printNotice');
+
+    if (modelEl) modelEl.value = params.get('model') || '';
+    if (desiredEl) desiredEl.value = params.get('price4') || '';
+    if (purchaseEl) purchaseEl.value = params.get('price1') || '';
+    if (batteryEl) batteryEl.value = params.get('price2') || '';
+    if (beltEl) beltEl.value = params.get('price3') || '';
+    if (noticeEl) noticeEl.checked = params.get('notice') === '1';
+
+    const serialRaw = params.get('serial');
+    const serialNum = serialRaw === null ? null : Number(serialRaw);
+    if (Number.isSafeInteger(serialNum) && serialNum > 0) {
+        saveSerialNumber(serialNum);
+    }
+
+    const category = params.get('category') || '';
+    const operation = params.get('operation') || '';
+    applyCategoryAndOperationFromText(category, operation);
+
+    if (typeof updatePreview === 'function') updatePreview();
+    if (modelEl && typeof autoGrowTextarea === 'function') autoGrowTextarea(modelEl);
+}
+
+function applyCategoryAndOperationFromText(category, operation) {
+    const categoryType = document.getElementById('categoryType');
+    const otherCategory = document.getElementById('otherCategory');
+    const operationType = document.getElementById('operationType');
+    const otherOperation = document.getElementById('otherOperation');
+
+    if (categoryType) {
+        let matched = false;
+        for (let i = 0; i < categoryType.options.length; i++) {
+            if (categoryType.options[i].value === category) {
+                categoryType.value = category;
+                matched = true;
+                break;
+            }
+        }
+        if (!matched && category) {
+            categoryType.value = 'other';
+            if (otherCategory) otherCategory.value = category;
+        } else if (!category) {
+            categoryType.value = '';
+        }
+        categoryType.dispatchEvent(new Event('change', { bubbles: true }));
+    }
+
+    if (operationType) {
+        let matched = false;
+        for (let i = 0; i < operationType.options.length; i++) {
+            if (operationType.options[i].value === operation) {
+                operationType.value = operation;
+                matched = true;
+                break;
+            }
+        }
+        if (!matched && operation) {
+            operationType.value = 'other';
+            if (otherOperation) otherOperation.value = operation;
+        } else if (!operation) {
+            operationType.value = '';
+        }
+        operationType.dispatchEvent(new Event('change', { bubbles: true }));
+    }
+}
+
+function maybeHandleNimbotAutoprintFromUrl() {
+    const params = new URLSearchParams(window.location.search);
+    if (params.get('autoprint') !== 'nimbotb1') return false;
+
+    applyPrinterSelection('nimbotb1', { notify: false });
+    fillFormFromNimbotAutoprintParams(params);
+    clearUrlParams();
+
+    const serialNumber = loadSerialNumber().toString();
+    const modelNumber = document.getElementById('modelNumber').value;
+    const desiredPrice = document.getElementById('desiredPrice').value;
+    const purchasePrice = document.getElementById('purchasePrice').value;
+    const batteryCost = document.getElementById('batteryCost').value;
+    const beltCost = document.getElementById('beltCost').value;
+
+    let category = '';
+    const categoryType = document.getElementById('categoryType').value;
+    const otherCategory = document.getElementById('otherCategory').value;
+    if (categoryType === 'other' && otherCategory) category = otherCategory;
+    else if (categoryType !== 'other') category = categoryType;
+
+    let operation = '';
+    const operationType = document.getElementById('operationType').value;
+    const otherOperation = document.getElementById('otherOperation').value;
+    if (operationType === 'other' && otherOperation) operation = otherOperation;
+    else if (operationType !== 'other') operation = operationType;
+
+    showMessage('NIMBOT B1へ自動印字を開始します...', 'success');
+    setTimeout(function() {
+        printWithNimbotB1(
+            serialNumber, modelNumber, category, operation,
+            purchasePrice, batteryCost, beltCost, desiredPrice,
+            { skipConfirm: true, fromAutoprint: true }
+        );
+    }, 600);
+    return true;
+}
+
+async function printWithNimbotB1(serialNumber, modelNumber, category, operation, purchasePrice, batteryCost, beltCost, desiredPrice, options) {
+    options = options || {};
     console.log('=== NIMBOT B1印刷開始 ===');
 
-    if (!confirmPrint('NIMBOT B1')) return;
+    if (!options.skipConfirm && !confirmPrint('NIMBOT B1')) return;
 
     try {
         if (typeof QRCode === 'undefined') {
             throw new Error('QRコードライブラリの読み込みに失敗しました');
+        }
+
+        const canBlePrint = isNimbotWebBluetoothAvailable();
+
+        // iPhone Safari等はWeb Bluetooth非対応 → Bluefyへ渡して自動印字
+        if (!canBlePrint && isAppleMobileDevice() && !options.fromAutoprint) {
+            const goBluefy = confirm(
+                'iPhoneのSafariではNIMBOT B1へ直接印字できません。\n\n' +
+                '無料アプリ「Bluefy」を開いて自動印字しますか？\n' +
+                '（未インストールの場合はApp Storeで「Bluefy」を検索してください）'
+            );
+            if (!goBluefy) {
+                showMessage('印刷をキャンセルしました', 'success');
+                return;
+            }
+            const pageUrl = buildNimbotAutoprintPageUrl(
+                serialNumber, modelNumber, category, operation,
+                purchasePrice, batteryCost, beltCost, desiredPrice
+            );
+            showMessage('Bluefyを起動して自動印字します...', 'success');
+            setTimeout(function() {
+                openNimbotPrintInBluefy(pageUrl);
+            }, 200);
+            return;
+        }
+
+        if (!canBlePrint) {
+            throw new Error(
+                'このブラウザはBluetooth直印字に未対応です。AndroidはChrome、iPhoneはBluefyで開いてください'
+            );
         }
 
         showMessage('NIMBOT B1用の印刷データを作成中...', 'success');
@@ -1009,38 +1194,24 @@ async function printWithNimbotB1(serialNumber, modelNumber, category, operation,
         const labelData = buildLabelPrintData(serialNumber, modelNumber, category, operation, purchasePrice, batteryCost, beltCost, desiredPrice);
         const canvas = await renderNimbotB1LabelCanvas(labelData);
         const pngDataUrl = canvas.toDataURL('image/png');
-        const canBlePrint = isNimbotWebBluetoothAvailable();
 
-        if (canBlePrint) {
-            showMessage('NIMBOT B1へ接続して印字します（端末のBluetooth選択画面が出ます）...', 'success');
-            await Niimbot.printImage(pngDataUrl, {
-                model: NIMBOT_B1_MODEL,
-                size: NIMBOT_B1_SIZE,
-                onProgress: function(status) {
-                    if (status && status !== 'ok') {
-                        showMessage('NIMBOT B1: ' + status, 'success');
-                    }
+        showMessage('NIMBOT B1へ接続して印字します（端末のBluetooth選択画面が出ます）...', 'success');
+        await Niimbot.printImage(pngDataUrl, {
+            model: NIMBOT_B1_MODEL,
+            size: NIMBOT_B1_SIZE,
+            onProgress: function(status) {
+                if (status && status !== 'ok') {
+                    showMessage('NIMBOT B1: ' + status, 'success');
                 }
-            });
-        } else {
-            // iPhone Safari等はWeb Bluetooth非対応。PNGを渡して公式アプリ側で印字してもらう
-            await shareOrDownloadNimbotLabelPng(pngDataUrl, serialNumber);
-        }
+            }
+        });
 
         saveToHistory(serialNumber, modelNumber, category, operation, purchasePrice, batteryCost, beltCost, desiredPrice);
         const newSerial = parseInt(serialNumber, 10) + 1;
         saveSerialNumber(newSerial);
         updateSerialDisplay();
         updatePreview();
-
-        if (canBlePrint) {
-            showMessage('NIMBOT B1へ印字しました。連番を ' + newSerial + ' に更新しました。', 'success');
-        } else {
-            showMessage(
-                'この端末はBluetooth直印字に未対応です。画像を保存／共有したので、NIIMBOTアプリで画像印字してください。連番を ' + newSerial + ' に更新しました。',
-                'success'
-            );
-        }
+        showMessage('NIMBOT B1へ印字しました。連番を ' + newSerial + ' に更新しました。', 'success');
     } catch (error) {
         console.error('=== NIMBOT B1印刷エラー ===', error);
         const msg = (error && error.message) ? error.message : String(error);
@@ -1050,34 +1221,6 @@ async function printWithNimbotB1(serialNumber, modelNumber, category, operation,
         }
         showMessage('NIMBOT B1印刷エラー: ' + msg, 'error');
     }
-}
-
-async function shareOrDownloadNimbotLabelPng(pngDataUrl, serialNumber) {
-    const fileName = 'tstime-nimbot-b1-' + String(serialNumber).padStart(5, '0') + '.png';
-    const blob = await (await fetch(pngDataUrl)).blob();
-    const file = new File([blob], fileName, { type: 'image/png' });
-
-    if (navigator.canShare && navigator.canShare({ files: [file] })) {
-        try {
-            await navigator.share({
-                files: [file],
-                title: 'NIMBOT B1 値札',
-                text: 'NIIMBOTアプリでこの画像を印字してください'
-            });
-            return;
-        } catch (shareError) {
-            if (shareError && shareError.name === 'AbortError') return;
-            console.warn('共有に失敗したためダウンロードに切り替えます', shareError);
-        }
-    }
-
-    const link = document.createElement('a');
-    link.href = pngDataUrl;
-    link.download = fileName;
-    link.style.display = 'none';
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
 }
 
 // 50×30mm向けの仮レイアウト。添付の印字配置が届き次第、差し替える
