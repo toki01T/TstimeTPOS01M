@@ -53,7 +53,7 @@ function loadPrinterSelection() {
 }
 
 function normalizePrinterId(printer) {
-    if (printer === 'printassist' || printer === 'tmassistant' || printer === 'mpb20' || printer === 'sms210i') {
+    if (printer === 'printassist' || printer === 'tmassistant' || printer === 'mpb20' || printer === 'sms210i' || printer === 'nimbotb1') {
         return printer;
     }
     return null;
@@ -64,7 +64,8 @@ function printerDisplayName(printer) {
         printassist: 'TM Print Assistant',
         tmassistant: 'TM Assistant',
         mpb20: 'MP-B20',
-        sms210i: 'SM-S210i'
+        sms210i: 'SM-S210i',
+        nimbotb1: 'NIMBOT B1'
     };
     return labels[printer] || 'TM Print Assistant';
 }
@@ -75,7 +76,7 @@ function applyPrinterSelection(printer, options) {
 
     savePrinterSelection(normalized);
     updatePrinterDisplay(normalized);
-    if (normalized === 'mpb20' || normalized === 'sms210i') {
+    if (normalized === 'mpb20' || normalized === 'sms210i' || normalized === 'nimbotb1') {
         preloadMpb20FontIfSelected();
     }
 
@@ -90,9 +91,10 @@ function updatePrinterDisplay(printer) {
     const tmAssistantBtn = document.getElementById('tmAssistantOption');
     const mpB20Btn = document.getElementById('mpB20Option');
     const smS210iBtn = document.getElementById('smS210iOption');
+    const nimbotB1Btn = document.getElementById('nimbotB1Option');
     const printerInfo = document.getElementById('printerInfo');
 
-    [printAssistBtn, tmAssistantBtn, mpB20Btn, smS210iBtn].forEach(function(btn) {
+    [printAssistBtn, tmAssistantBtn, mpB20Btn, smS210iBtn, nimbotB1Btn].forEach(function(btn) {
         if (btn) btn.classList.remove('active');
     });
 
@@ -102,6 +104,8 @@ function updatePrinterDisplay(printer) {
         mpB20Btn.classList.add('active');
     } else if (printer === 'sms210i' && smS210iBtn) {
         smS210iBtn.classList.add('active');
+    } else if (printer === 'nimbotb1' && nimbotB1Btn) {
+        nimbotB1Btn.classList.add('active');
     } else if (printAssistBtn) {
         printAssistBtn.classList.add('active');
         printer = 'printassist';
@@ -142,6 +146,10 @@ document.addEventListener('DOMContentLoaded', function() {
 
     document.getElementById('smS210iOption').addEventListener('click', function() {
         applyPrinterSelection('sms210i', { notify: true });
+    });
+
+    document.getElementById('nimbotB1Option').addEventListener('click', function() {
+        applyPrinterSelection('nimbotb1', { notify: true });
     });
     
     // ハンバーガーメニューの設定
@@ -408,6 +416,9 @@ function printLabel() {
     } else if (selectedPrinter === 'sms210i') {
         console.log('SM-S210i印刷を使用');
         printWithSMS210i(serialNumber, modelNumber, category, operation, purchasePrice, batteryCost, beltCost, desiredPrice);
+    } else if (selectedPrinter === 'nimbotb1') {
+        console.log('NIMBOT B1印刷を使用');
+        printWithNimbotB1(serialNumber, modelNumber, category, operation, purchasePrice, batteryCost, beltCost, desiredPrice);
     } else {
         showMessage('プリンター選択が不正です', 'error');
     }
@@ -952,6 +963,191 @@ async function printWithSMS210i(serialNumber, modelNumber, category, operation, 
         console.error('=== SM-S210i印刷エラー ===', error);
         showMessage('SM-S210i印刷エラー: ' + error.message, 'error');
     }
+}
+
+// NIMBOT B1（Web Bluetooth直印字）。公式アプリURLスキームが無いためブラウザからBLEで送る。
+// 用紙は当面 50×30mm（203dpi / 384×240）。印字配置は仮レイアウトで、添付後に合わせる。
+const NIMBOT_B1_MODEL = {
+    label: 'Niimbot B1',
+    id: 4096,
+    dpi: 203,
+    protocol: 'v4',
+    task: 'b1',
+    density: 3,
+    label_type: 1,
+    speed: 1,
+    name_prefixes: ['B1']
+};
+const NIMBOT_B1_SIZE = {
+    label: '50 × 30 mm (B1)',
+    code: 'T50*30',
+    w_mm: 50,
+    h_mm: 30,
+    w_px: 384,
+    h_px: 240,
+    margin: 8,
+    offset_y_px: 4,
+    dpi: 203
+};
+
+function isNimbotWebBluetoothAvailable() {
+    return !!(window.Niimbot && typeof Niimbot.isSupported === 'function' && Niimbot.isSupported());
+}
+
+async function printWithNimbotB1(serialNumber, modelNumber, category, operation, purchasePrice, batteryCost, beltCost, desiredPrice) {
+    console.log('=== NIMBOT B1印刷開始 ===');
+
+    if (!confirmPrint('NIMBOT B1')) return;
+
+    try {
+        if (typeof QRCode === 'undefined') {
+            throw new Error('QRコードライブラリの読み込みに失敗しました');
+        }
+
+        showMessage('NIMBOT B1用の印刷データを作成中...', 'success');
+
+        const labelData = buildLabelPrintData(serialNumber, modelNumber, category, operation, purchasePrice, batteryCost, beltCost, desiredPrice);
+        const canvas = await renderNimbotB1LabelCanvas(labelData);
+        const pngDataUrl = canvas.toDataURL('image/png');
+        const canBlePrint = isNimbotWebBluetoothAvailable();
+
+        if (canBlePrint) {
+            showMessage('NIMBOT B1へ接続して印字します（端末のBluetooth選択画面が出ます）...', 'success');
+            await Niimbot.printImage(pngDataUrl, {
+                model: NIMBOT_B1_MODEL,
+                size: NIMBOT_B1_SIZE,
+                onProgress: function(status) {
+                    if (status && status !== 'ok') {
+                        showMessage('NIMBOT B1: ' + status, 'success');
+                    }
+                }
+            });
+        } else {
+            // iPhone Safari等はWeb Bluetooth非対応。PNGを渡して公式アプリ側で印字してもらう
+            await shareOrDownloadNimbotLabelPng(pngDataUrl, serialNumber);
+        }
+
+        saveToHistory(serialNumber, modelNumber, category, operation, purchasePrice, batteryCost, beltCost, desiredPrice);
+        const newSerial = parseInt(serialNumber, 10) + 1;
+        saveSerialNumber(newSerial);
+        updateSerialDisplay();
+        updatePreview();
+
+        if (canBlePrint) {
+            showMessage('NIMBOT B1へ印字しました。連番を ' + newSerial + ' に更新しました。', 'success');
+        } else {
+            showMessage(
+                'この端末はBluetooth直印字に未対応です。画像を保存／共有したので、NIIMBOTアプリで画像印字してください。連番を ' + newSerial + ' に更新しました。',
+                'success'
+            );
+        }
+    } catch (error) {
+        console.error('=== NIMBOT B1印刷エラー ===', error);
+        const msg = (error && error.message) ? error.message : String(error);
+        if (/User cancelled|canceled|cancelled|NotFoundError|choos/i.test(msg)) {
+            showMessage('NIMBOT B1の接続／印字がキャンセルされました', 'error');
+            return;
+        }
+        showMessage('NIMBOT B1印刷エラー: ' + msg, 'error');
+    }
+}
+
+async function shareOrDownloadNimbotLabelPng(pngDataUrl, serialNumber) {
+    const fileName = 'tstime-nimbot-b1-' + String(serialNumber).padStart(5, '0') + '.png';
+    const blob = await (await fetch(pngDataUrl)).blob();
+    const file = new File([blob], fileName, { type: 'image/png' });
+
+    if (navigator.canShare && navigator.canShare({ files: [file] })) {
+        try {
+            await navigator.share({
+                files: [file],
+                title: 'NIMBOT B1 値札',
+                text: 'NIIMBOTアプリでこの画像を印字してください'
+            });
+            return;
+        } catch (shareError) {
+            if (shareError && shareError.name === 'AbortError') return;
+            console.warn('共有に失敗したためダウンロードに切り替えます', shareError);
+        }
+    }
+
+    const link = document.createElement('a');
+    link.href = pngDataUrl;
+    link.download = fileName;
+    link.style.display = 'none';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+}
+
+// 50×30mm向けの仮レイアウト。添付の印字配置が届き次第、差し替える
+async function renderNimbotB1LabelCanvas(labelData) {
+    await ensurePrintFontReady();
+
+    const widthPx = NIMBOT_B1_SIZE.w_px;
+    const heightPx = NIMBOT_B1_SIZE.h_px;
+    const margin = 8;
+    const contentWidth = widthPx - margin * 2;
+    const centerX = widthPx / 2;
+    const fontFamily = MPB20_FONT_FAMILY;
+
+    const canvas = document.createElement('canvas');
+    canvas.width = widthPx;
+    canvas.height = heightPx;
+    const ctx = canvas.getContext('2d');
+    ctx.fillStyle = '#ffffff';
+    ctx.fillRect(0, 0, widthPx, heightPx);
+    ctx.fillStyle = '#000000';
+    ctx.textBaseline = 'top';
+
+    let y = margin;
+
+    drawFittedLine(ctx, labelData.headerLine, centerX, y, contentWidth, MPB20_HEADER_FONT_FAMILY, 18, 'bold');
+    y += 22;
+
+    if (labelData.category) {
+        drawFittedLine(ctx, labelData.category, centerX, y, contentWidth, fontFamily, 14, 'bold');
+        y += 18;
+    }
+
+    const modelLines = labelData.modelLines.slice(0, 2);
+    modelLines.forEach(function(line) {
+        drawFittedLine(ctx, line, centerX, y, contentWidth, fontFamily, 15, 'bold');
+        y += 18;
+    });
+
+    if (labelData.operationLines && labelData.operationLines.length) {
+        drawFittedLine(ctx, labelData.operationLines[0], centerX, y, contentWidth, fontFamily, 13, 'bold');
+        y += 16;
+    }
+
+    y += 2;
+    drawFittedLine(ctx, labelData.desiredLine, centerX, y, contentWidth, fontFamily, 34, 'bold');
+    y += 40;
+
+    const qr = createPrintableQRCode(labelData.dataURL, 88);
+    const qrSize = Math.min(88, qr.size);
+    const qrX = Math.round(centerX - qrSize / 2);
+    const maxQrY = heightPx - margin - 18 - qrSize;
+    const qrY = Math.min(y, Math.max(margin, maxQrY));
+
+    ctx.imageSmoothingEnabled = false;
+    ctx.drawImage(qr.canvas, qrX, qrY, qrSize, qrSize);
+    ctx.imageSmoothingEnabled = true;
+
+    drawFittedLine(
+        ctx,
+        labelData.qrcodeNumber,
+        centerX,
+        qrY + qrSize + 2,
+        contentWidth,
+        MPB20_FONT_REGULAR_FAMILY,
+        12,
+        'normal'
+    );
+
+    await waitForNextFrame();
+    return canvas;
 }
 
 function waitForNextFrame() {

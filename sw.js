@@ -2,12 +2,13 @@
  * Android / Chrome の「ホーム画面に追加」判定に必要な最小構成。
  * 印字用の大容量フォントは意図的にキャッシュしない。
  */
-const CACHE_NAME = 'tstime-pwa-20260828c';
+const CACHE_NAME = 'tstime-pwa-20260906a';
 const PRECACHE_URLS = [
   './',
   './index.html',
   './style.css',
   './app.js',
+  './niimbot.js',
   './return.html',
   './manifest.webmanifest',
   './icons/icon-192.png',
