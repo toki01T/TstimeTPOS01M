@@ -1092,6 +1092,13 @@ const NIMBOT_B1_SIZE = {
     dpi: 203
 };
 const NIMBOT_B1_MAX_CONTINUOUS_HEIGHT_PX = 1600; // 約200mm。これ以上は切り詰め
+// 連続紙は1ページが高すぎるとB1が応答しなくなることがあるので帯に分割する
+const NIMBOT_B1_CONTINUOUS_CHUNK_PX = 480; // 約60mm
+// 連続紙の転送・印字は時間がかかるので待機を延ばす
+const NIMBOT_B1_CONTINUOUS_PAGE_WAIT_MS = 120000;
+// ラベル用は薄め、連続紙（レシート）はヘッドが火きにくいので通常の閾値
+const NIMBOT_INK_THRESHOLD = 110;
+const NIMBOT_CONTINUOUS_INK_THRESHOLD = 140;
 
 function isNimbotWebBluetoothAvailable() {
     return !!(window.Niimbot && typeof Niimbot.isSupported === 'function' && Niimbot.isSupported());
@@ -1311,11 +1318,72 @@ function returnAfterNimbotBluefyPrint() {
     }, 500);
 }
 
+function canvasToPngObjectUrl(canvas) {
+    return new Promise(function(resolve, reject) {
+        if (!canvas || typeof canvas.toBlob !== 'function') {
+            try {
+                resolve(canvas.toDataURL('image/png'));
+            } catch (error) {
+                reject(error);
+            }
+            return;
+        }
+        canvas.toBlob(function(blob) {
+            if (!blob) {
+                reject(new Error('PNGの生成に失敗しました'));
+                return;
+            }
+            resolve(URL.createObjectURL(blob));
+        }, 'image/png');
+    });
+}
+
+function revokeObjectUrls(urls) {
+    (urls || []).forEach(function(url) {
+        if (url && String(url).indexOf('blob:') === 0) {
+            try { URL.revokeObjectURL(url); } catch (e) { /* ignore */ }
+        }
+    });
+}
+
+// 連続紙用: 縦長キャンバスを固定高さのページに分割（末尾は白でパディング）
+function sliceCanvasToFixedPages(sourceCanvas, pageHeightPx) {
+    const pages = [];
+    const pageH = Math.max(8, pageHeightPx | 0);
+    for (let y = 0; y < sourceCanvas.height; y += pageH) {
+        const sliceH = Math.min(pageH, sourceCanvas.height - y);
+        const page = document.createElement('canvas');
+        page.width = sourceCanvas.width;
+        page.height = pageH;
+        const ctx = page.getContext('2d');
+        ctx.fillStyle = '#ffffff';
+        ctx.fillRect(0, 0, page.width, page.height);
+        ctx.drawImage(
+            sourceCanvas,
+            0, y, sourceCanvas.width, sliceH,
+            0, 0, sourceCanvas.width, sliceH
+        );
+        pages.push(page);
+    }
+    if (!pages.length) {
+        const empty = document.createElement('canvas');
+        empty.width = sourceCanvas.width;
+        empty.height = pageH;
+        const ctx = empty.getContext('2d');
+        ctx.fillStyle = '#ffffff';
+        ctx.fillRect(0, 0, empty.width, empty.height);
+        pages.push(empty);
+    }
+    return pages;
+}
+
 async function printWithNimbotB1(serialNumber, modelNumber, category, operation, purchasePrice, batteryCost, beltCost, desiredPrice, options) {
     options = options || {};
     console.log('=== NIMBOT B1印刷開始 ===');
 
     // 確認ダイアログは出さない（ポップアップ過多対策）。Bluefy起動も即実行する。
+    const createdUrls = [];
+    let previousPageWaitMs = null;
     try {
         const canBlePrint = isNimbotWebBluetoothAvailable();
         const paperMode = loadNimbotPaperMode();
@@ -1345,13 +1413,15 @@ async function printWithNimbotB1(serialNumber, modelNumber, category, operation,
             'success'
         );
 
-        let canvas;
-        let model;
-        let size;
         let historyExtra = { printer: 'nimbotb1', paperMode: paperMode };
+        const onProgress = function(status) {
+            if (status && status !== 'ok' && status !== 'connecting…') {
+                showMessage('NIMBOT B1: ' + status, 'success');
+            }
+        };
 
         if (paperMode === 'continuous') {
-            // いつもの値札レイアウトを384幅で描き、連続紙として送る
+            // いつもの値札レイアウトを384幅で描き、連続紙（label_type=3）として送る
             if (typeof QRCode === 'undefined') {
                 throw new Error('QRコードライブラリの読み込みに失敗しました');
             }
@@ -1359,11 +1429,12 @@ async function printWithNimbotB1(serialNumber, modelNumber, category, operation,
                 serialNumber, modelNumber, category, operation,
                 purchasePrice, batteryCost, beltCost, desiredPrice
             );
-            canvas = await renderThermalLabelCanvas(labelData, {
+            // 連続紙はレシート用紙でヘッドが火きにくいので、ラベル用の薄め設定は使わない
+            const canvas = await renderThermalLabelCanvas(labelData, {
                 paddingTop: 2 * 8,
                 paddingBottom: 12 * 8,
                 supersample: 3,
-                inkThreshold: NIMBOT_INK_THRESHOLD
+                inkThreshold: NIMBOT_CONTINUOUS_INK_THRESHOLD
             });
             if (canvas.width !== 384) {
                 throw new Error('連続紙用画像幅が不正です: ' + canvas.width);
@@ -1373,17 +1444,44 @@ async function printWithNimbotB1(serialNumber, modelNumber, category, operation,
                     '印字内容が長すぎます（約' + Math.round(canvas.height / 8) + 'mm）。型番を短くしてください'
                 );
             }
-            model = NIMBOT_B1_CONTINUOUS_MODEL;
-            size = {
+
+            const model = NIMBOT_B1_CONTINUOUS_MODEL;
+            const chunkH = NIMBOT_B1_CONTINUOUS_CHUNK_PX;
+            const pages = sliceCanvasToFixedPages(canvas, chunkH);
+            const size = {
                 label: '58mm continuous (printable 48mm)',
                 w_mm: 48,
-                h_mm: canvas.height / 8,
+                h_mm: chunkH / 8,
                 w_px: 384,
-                h_px: canvas.height,
+                h_px: chunkH,
                 margin: 0,
                 offset_y_px: 0,
                 dpi: 203
             };
+
+            previousPageWaitMs = Niimbot.PAGE_WAIT_MS;
+            Niimbot.PAGE_WAIT_MS = NIMBOT_B1_CONTINUOUS_PAGE_WAIT_MS;
+
+            for (let i = 0; i < pages.length; i++) {
+                createdUrls.push(await canvasToPngObjectUrl(pages[i]));
+            }
+
+            // 複数ページを1ジョブで送ると、PageEnd〜PrintEndの間は連続送りになる
+            if (createdUrls.length === 1) {
+                await Niimbot.printImage(createdUrls[0], {
+                    model: model,
+                    size: size,
+                    density: 3,
+                    onProgress: onProgress
+                });
+            } else {
+                await Niimbot.printBatch(createdUrls, {
+                    model: model,
+                    size: size,
+                    density: 3,
+                    onProgress: onProgress
+                });
+            }
         } else {
             if (typeof JsBarcode === 'undefined') {
                 throw new Error('バーコードライブラリの読み込みに失敗しました');
@@ -1393,25 +1491,19 @@ async function printWithNimbotB1(serialNumber, modelNumber, category, operation,
                 purchasePrice, batteryCost, beltCost, desiredPrice
             );
             saveNimbotBarcodeRecord(barcodeRecord);
-            canvas = await renderNimbotB1LabelCanvas(barcodeRecord);
-            model = NIMBOT_B1_MODEL;
-            size = NIMBOT_B1_SIZE;
+            const canvas = await renderNimbotB1LabelCanvas(barcodeRecord);
             historyExtra.barcodeId = barcodeRecord.barcodeId;
             historyExtra.barcodeValue = barcodeRecord.barcodeValue;
+            const pngUrl = await canvasToPngObjectUrl(canvas);
+            createdUrls.push(pngUrl);
+
+            await Niimbot.printImage(pngUrl, {
+                model: NIMBOT_B1_MODEL,
+                size: NIMBOT_B1_SIZE,
+                density: 2,
+                onProgress: onProgress
+            });
         }
-
-        const pngDataUrl = canvas.toDataURL('image/png');
-
-        await Niimbot.printImage(pngDataUrl, {
-            model: model,
-            size: size,
-            density: 2,
-            onProgress: function(status) {
-                if (status && status !== 'ok' && status !== 'connecting…') {
-                    showMessage('NIMBOT B1: ' + status, 'success');
-                }
-            }
-        });
 
         saveToHistory(serialNumber, modelNumber, category, operation, purchasePrice, batteryCost, beltCost, desiredPrice, historyExtra);
         const newSerial = parseInt(serialNumber, 10) + 1;
@@ -1437,6 +1529,11 @@ async function printWithNimbotB1(serialNumber, modelNumber, category, operation,
             return;
         }
         showMessage('NIMBOT B1印刷エラー: ' + msg, 'error');
+    } finally {
+        revokeObjectUrls(createdUrls);
+        if (previousPageWaitMs != null && window.Niimbot) {
+            Niimbot.PAGE_WAIT_MS = previousPageWaitMs;
+        }
     }
 }
 
@@ -1954,8 +2051,6 @@ function applyMpb20Font(ctx, fontFamily, size, weight) {
 // 濃いめに倒すと画数の多い漢字の隙間が埋まり、サーマルのにじみと合わさって潰れる。
 // ドットの半分以上が掛かったところだけ黒にする
 const MPB20_INK_THRESHOLD = 140;
-// NIMBOTは二値化が強めなので、閾値を下げて印字の黒つぶれを抑える
-const NIMBOT_INK_THRESHOLD = 110;
 
 function reduceBandToDots(bandCtx, supersample, sourceTop, widthPx, height, outputImage, outputTop, inkThreshold) {
     const sourceWidth = widthPx * supersample;
