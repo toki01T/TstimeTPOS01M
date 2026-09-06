@@ -17,7 +17,7 @@
     <link rel="icon" type="image/png" sizes="192x192" href="icons/icon-192.png">
     <link rel="icon" type="image/png" sizes="512x512" href="icons/icon-512.png">
     <!-- 更新が端末のキャッシュに阻まれないよう、修正のたびにこの番号を上げる -->
-    <link rel="stylesheet" href="style.css?v=20260906c">
+    <link rel="stylesheet" href="style.css?v=20260906d">
 </head>
 <body>
     <div class="container">
@@ -79,6 +79,10 @@
                     <button id="showHistory" class="menu-button">履歴を表示</button>
                 </div>
                 <div class="menu-item">
+                    <button id="scanBarcodeBtn" class="menu-button">バーコード読取</button>
+                    <p class="menu-info menu-info-sub">NIMBOT値札のバーコードから内容を復元します</p>
+                </div>
+                <div class="menu-item">
                     <button id="testReturn" class="menu-button-secondary">戻り先をテスト</button>
                     <p class="menu-info menu-info-sub" id="returnHint">印刷後の戻り方は端末により異なります</p>
                 </div>
@@ -100,6 +104,23 @@
                 <div class="history-list" id="historyList">
                     <!-- 履歴がここに動的に追加されます -->
                 </div>
+            </div>
+        </div>
+
+        <!-- バーコード読取モーダル -->
+        <div class="password-modal" id="barcodeScanModal" aria-hidden="true">
+            <div class="password-modal-content">
+                <div class="password-modal-header">
+                    <h3>バーコード読取</h3>
+                    <button type="button" class="close-history" id="closeBarcodeScan" aria-label="閉じる">×</button>
+                </div>
+                <p class="menu-info menu-info-sub" style="margin: 0 0 12px;">カメラで読み取るか、番号を入力してください。</p>
+                <video id="barcodeScanVideo" class="barcode-scan-video" playsinline muted></video>
+                <canvas id="barcodeScanCanvas" hidden></canvas>
+                <input type="text" id="barcodeScanInput" placeholder="バーコード番号" autocomplete="off" inputmode="text">
+                <button type="button" id="barcodeScanSubmit" class="menu-button">読み込む</button>
+                <button type="button" id="barcodeScanStop" class="menu-button-secondary">カメラ停止</button>
+                <p class="menu-info menu-info-sub" id="barcodeScanStatus"></p>
             </div>
         </div>
 
@@ -239,8 +260,9 @@
     </script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.11.6/dist/JsBarcode.all.min.js"></script>
     <script src="epos-2.27.0.js" onerror="console.warn('ePOS SDK not loaded')"></script>
-    <script src="niimbot.js?v=20260906c"></script>
-    <script src="app.js?v=20260906c"></script>
+    <script src="niimbot.js?v=20260906d"></script>
+    <script src="app.js?v=20260906d"></script>
 </body>
 </html>

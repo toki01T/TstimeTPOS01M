@@ -555,6 +555,30 @@ body {
     padding: 14px;
 }
 
+.barcode-scan-video {
+    display: block;
+    width: 100%;
+    max-height: 220px;
+    margin: 0 0 12px;
+    border-radius: 12px;
+    background: #0f172a;
+    object-fit: cover;
+}
+
+#barcodeScanModal .password-modal-content {
+    max-width: 420px;
+}
+
+#barcodeScanModal input[type="text"] {
+    width: 100%;
+    margin: 0 0 10px;
+    padding: 12px 14px;
+    border-radius: 12px;
+    border: 1px solid #cbd5e1;
+    font-size: 1rem;
+    box-sizing: border-box;
+}
+
 .side-menu {
     position: fixed;
     top: 0;

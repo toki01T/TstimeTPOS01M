@@ -222,6 +222,34 @@ document.addEventListener('DOMContentLoaded', function() {
     document.getElementById('showHistory').addEventListener('click', function() {
         showHistoryModal();
     });
+
+    const scanBarcodeBtn = document.getElementById('scanBarcodeBtn');
+    if (scanBarcodeBtn) {
+        scanBarcodeBtn.addEventListener('click', function() {
+            openBarcodeScanModal();
+        });
+    }
+    const closeBarcodeScan = document.getElementById('closeBarcodeScan');
+    if (closeBarcodeScan) {
+        closeBarcodeScan.addEventListener('click', closeBarcodeScanModal);
+    }
+    const barcodeScanSubmit = document.getElementById('barcodeScanSubmit');
+    if (barcodeScanSubmit) {
+        barcodeScanSubmit.addEventListener('click', submitBarcodeScanInput);
+    }
+    const barcodeScanStop = document.getElementById('barcodeScanStop');
+    if (barcodeScanStop) {
+        barcodeScanStop.addEventListener('click', stopBarcodeCamera);
+    }
+    const barcodeScanInput = document.getElementById('barcodeScanInput');
+    if (barcodeScanInput) {
+        barcodeScanInput.addEventListener('keydown', function(e) {
+            if (e.key === 'Enter') {
+                e.preventDefault();
+                submitBarcodeScanInput();
+            }
+        });
+    }
     
     // 履歴モーダルを閉じる
     document.getElementById('closeHistory').addEventListener('click', function() {
@@ -1201,59 +1229,33 @@ function showNimbotReturnOverlay(links) {
 function returnAfterNimbotBluefyPrint() {
     const httpsUrl = window.__nimbotReturnHttps || getHttpsAppUrl();
     const safariUrl = toXSafariUrl(httpsUrl);
-    const shortcutUrl = getShortcutReturnUrl();
-    const returnPage = buildNimbotReturnPageUrl(httpsUrl);
 
     showMessage('印字完了。元のアプリへ戻ります...', 'success');
     showNimbotReturnOverlay({
         safari: safariUrl,
-        shortcut: shortcutUrl,
+        shortcut: getShortcutReturnUrl(),
         https: httpsUrl
     });
 
-    // 1) Safariへ直接戻す（Bluefy内のhttps遷移だとBluefyに残るため x-safari-https を使う）
+    // 自動戻りは1回だけ（ポップアップが増えないよう二重遷移しない）
     setTimeout(function() {
         try {
             window.location.href = safariUrl;
         } catch (e) {
             console.warn('Safari戻り失敗', e);
         }
-    }, 700);
-
-    // 2) だめなら return.html（ショートカット経由）へ
-    setTimeout(function() {
-        try {
-            window.location.href = returnPage;
-        } catch (e) {
-            console.warn('return.html遷移失敗', e);
-        }
-    }, 2200);
+    }, 500);
 }
 
 async function printWithNimbotB1(serialNumber, modelNumber, category, operation, purchasePrice, batteryCost, beltCost, desiredPrice, options) {
     options = options || {};
     console.log('=== NIMBOT B1印刷開始 ===');
 
-    if (!options.skipConfirm && !confirmPrint('NIMBOT B1')) return;
-
+    // 確認ダイアログは出さない（ポップアップ過多対策）。Bluefy起動も即実行する。
     try {
-        if (typeof QRCode === 'undefined') {
-            throw new Error('QRコードライブラリの読み込みに失敗しました');
-        }
-
         const canBlePrint = isNimbotWebBluetoothAvailable();
 
-        // iPhone Safari等はWeb Bluetooth非対応 → Bluefyへ渡して自動印字
         if (!canBlePrint && isAppleMobileDevice() && !options.fromAutoprint) {
-            const goBluefy = confirm(
-                'iPhoneのSafariではNIMBOT B1へ直接印字できません。\n\n' +
-                '無料アプリ「Bluefy」を開いて自動印字しますか？\n' +
-                '（未インストールの場合はApp Storeで「Bluefy」を検索してください）'
-            );
-            if (!goBluefy) {
-                showMessage('印刷をキャンセルしました', 'success');
-                return;
-            }
             const pageUrl = buildNimbotAutoprintPageUrl(
                 serialNumber, modelNumber, category, operation,
                 purchasePrice, batteryCost, beltCost, desiredPrice
@@ -1261,7 +1263,7 @@ async function printWithNimbotB1(serialNumber, modelNumber, category, operation,
             showMessage('Bluefyを起動して自動印字します...', 'success');
             setTimeout(function() {
                 openNimbotPrintInBluefy(pageUrl);
-            }, 200);
+            }, 150);
             return;
         }
 
@@ -1271,32 +1273,44 @@ async function printWithNimbotB1(serialNumber, modelNumber, category, operation,
             );
         }
 
-        showMessage('NIMBOT B1用の印刷データを作成中...', 'success');
+        if (typeof JsBarcode === 'undefined') {
+            throw new Error('バーコードライブラリの読み込みに失敗しました');
+        }
 
-        const labelData = buildLabelPrintData(serialNumber, modelNumber, category, operation, purchasePrice, batteryCost, beltCost, desiredPrice);
-        const canvas = await renderNimbotB1LabelCanvas(labelData);
+        showMessage('NIMBOT B1へ印字中...', 'success');
+
+        const barcodeRecord = createNimbotBarcodeRecord(
+            serialNumber, modelNumber, category, operation,
+            purchasePrice, batteryCost, beltCost, desiredPrice
+        );
+        saveNimbotBarcodeRecord(barcodeRecord);
+
+        const canvas = await renderNimbotB1LabelCanvas(barcodeRecord);
         const pngDataUrl = canvas.toDataURL('image/png');
 
-        showMessage('NIMBOT B1へ接続して印字します（端末のBluetooth選択画面が出ます）...', 'success');
         await Niimbot.printImage(pngDataUrl, {
             model: NIMBOT_B1_MODEL,
             size: NIMBOT_B1_SIZE,
+            density: 3,
             onProgress: function(status) {
-                if (status && status !== 'ok') {
+                if (status && status !== 'ok' && status !== 'connecting…') {
                     showMessage('NIMBOT B1: ' + status, 'success');
                 }
             }
         });
 
-        saveToHistory(serialNumber, modelNumber, category, operation, purchasePrice, batteryCost, beltCost, desiredPrice);
+        saveToHistory(serialNumber, modelNumber, category, operation, purchasePrice, batteryCost, beltCost, desiredPrice, {
+            barcodeId: barcodeRecord.barcodeId,
+            barcodeValue: barcodeRecord.barcodeValue,
+            printer: 'nimbotb1'
+        });
         const newSerial = parseInt(serialNumber, 10) + 1;
         saveSerialNumber(newSerial);
         updateSerialDisplay();
         updatePreview();
         showMessage('NIMBOT B1へ印字しました。連番を ' + newSerial + ' に更新しました。', 'success');
 
-        // Bluefyから起動した印字なら、Safari / ホーム画面アプリへ戻す
-        if (options.fromAutoprint || isAppleMobileDevice()) {
+        if (options.fromAutoprint) {
             returnAfterNimbotBluefyPrint();
         }
     } catch (error) {
@@ -1310,15 +1324,224 @@ async function printWithNimbotB1(serialNumber, modelNumber, category, operation,
     }
 }
 
-// 50×30mm向けの仮レイアウト。添付の印字配置が届き次第、差し替える
-async function renderNimbotB1LabelCanvas(labelData) {
+const NIMBOT_BARCODE_STORE_KEY = 'nimbotBarcodeStore';
+const NIMBOT_NOTICE_LINES = [
+    '※大幅に査定金額が離れている場合は',
+    'お売りする事が出来ませんのでご了承下さい。'
+];
+
+function createRandomBarcodeId() {
+    let id = '';
+    for (let i = 0; i < 12; i++) {
+        id += Math.floor(Math.random() * 10).toString();
+    }
+    return id;
+}
+
+function createNimbotBarcodeRecord(serialNumber, modelNumber, category, operation, purchasePrice, batteryCost, beltCost, desiredPrice) {
+    const barcodeId = createRandomBarcodeId();
+    const record = {
+        barcodeId: barcodeId,
+        serialNumber: String(serialNumber || ''),
+        modelNumber: modelNumber || '',
+        category: category || '',
+        operation: operation || '',
+        purchasePrice: purchasePrice || '',
+        batteryCost: batteryCost || '',
+        beltCost: beltCost || '',
+        desiredPrice: desiredPrice || '',
+        printer: 'nimbotb1',
+        printedAt: new Date().toISOString()
+    };
+    record.barcodeValue = buildNimbotBarcodeValue(record);
+    record.displayCode = String(barcodeId).slice(-8);
+    return record;
+}
+
+function buildNimbotBarcodeValue(record) {
+    // CODE128は短いほど読みやすい。詰め込み可能なら本体データを入れ、長ければIDのみ。
+    const packed = {
+        id: record.barcodeId,
+        s: record.serialNumber,
+        m: String(record.modelNumber || '').slice(0, 28),
+        p4: record.desiredPrice,
+        pr: 'nimbotb1'
+    };
+    if (record.category) packed.c = String(record.category).slice(0, 12);
+    if (record.operation) packed.o = String(record.operation).slice(0, 10);
+    if (record.purchasePrice) packed.p1 = String(record.purchasePrice);
+    if (record.batteryCost) packed.p2 = String(record.batteryCost);
+    if (record.beltCost) packed.p3 = String(record.beltCost);
+
+    try {
+        const encoded = 'T1.' + bytesToBase64Url(new TextEncoder().encode(JSON.stringify(packed)));
+        if (encoded.length <= 48) return encoded;
+    } catch (e) {
+        console.warn('バーコード埋め込みに失敗、IDのみ使用', e);
+    }
+    return 'N' + record.barcodeId;
+}
+
+function loadNimbotBarcodeStore() {
+    try {
+        const raw = localStorage.getItem(NIMBOT_BARCODE_STORE_KEY);
+        const parsed = raw ? JSON.parse(raw) : {};
+        return parsed && typeof parsed === 'object' ? parsed : {};
+    } catch (e) {
+        return {};
+    }
+}
+
+function saveNimbotBarcodeRecord(record) {
+    const store = loadNimbotBarcodeStore();
+    store[record.barcodeId] = record;
+    store[record.barcodeValue] = record;
+    // 古い順に間引き（最大200件）
+    const ids = Object.keys(store).filter(function(k) {
+        return store[k] && store[k].barcodeId === k;
+    });
+    if (ids.length > 200) {
+        ids.sort(function(a, b) {
+            return String(store[a].printedAt || '').localeCompare(String(store[b].printedAt || ''));
+        });
+        ids.slice(0, ids.length - 200).forEach(function(id) {
+            const old = store[id];
+            delete store[id];
+            if (old && old.barcodeValue) delete store[old.barcodeValue];
+        });
+    }
+    localStorage.setItem(NIMBOT_BARCODE_STORE_KEY, JSON.stringify(store));
+}
+
+function findNimbotBarcodeRecord(code) {
+    const value = String(code || '').trim();
+    if (!value) return null;
+    const store = loadNimbotBarcodeStore();
+    if (store[value]) return store[value];
+    if (value.indexOf('N') === 0 && store[value.slice(1)]) return store[value.slice(1)];
+    // 末尾8桁でも探す
+    const keys = Object.keys(store);
+    for (let i = 0; i < keys.length; i++) {
+        const rec = store[keys[i]];
+        if (!rec || !rec.barcodeId) continue;
+        if (rec.barcodeId === value || rec.displayCode === value || String(rec.barcodeId).slice(-8) === value) {
+            return rec;
+        }
+    }
+    return null;
+}
+
+function decodeNimbotBarcodeValue(code) {
+    const value = String(code || '').trim();
+    const fromStore = findNimbotBarcodeRecord(value);
+    if (fromStore) return fromStore;
+
+    if (value.indexOf('T1.') === 0) {
+        try {
+            const packed = JSON.parse(new TextDecoder().decode(base64UrlToBytes(value.slice(3))));
+            if (!packed || typeof packed !== 'object') return null;
+            return {
+                barcodeId: packed.id || '',
+                barcodeValue: value,
+                displayCode: String(packed.id || '').slice(-8),
+                serialNumber: packed.s != null ? String(packed.s) : '',
+                modelNumber: packed.m != null ? String(packed.m) : '',
+                category: packed.c != null ? String(packed.c) : '',
+                operation: packed.o != null ? String(packed.o) : '',
+                purchasePrice: packed.p1 != null ? String(packed.p1) : '',
+                batteryCost: packed.p2 != null ? String(packed.p2) : '',
+                beltCost: packed.p3 != null ? String(packed.p3) : '',
+                desiredPrice: packed.p4 != null ? String(packed.p4) : '',
+                printer: packed.pr != null ? String(packed.pr) : 'nimbotb1'
+            };
+        } catch (e) {
+            return null;
+        }
+    }
+    return null;
+}
+
+function applyNimbotBarcodeRecord(record) {
+    if (!record) return false;
+    applyQrPayload({
+        serialNumber: record.serialNumber,
+        validSerial: Number.isSafeInteger(Number(record.serialNumber)) ? Number(record.serialNumber) : null,
+        modelNumber: record.modelNumber,
+        category: record.category,
+        operation: record.operation,
+        purchasePrice: record.purchasePrice,
+        batteryCost: record.batteryCost,
+        beltCost: record.beltCost,
+        desiredPrice: record.desiredPrice,
+        printer: record.printer || 'nimbotb1'
+    }, { silent: true });
+    showMessage('バーコードから値札データを読み込みました', 'success');
+    return true;
+}
+
+function formatNimbotPriceYen(price) {
+    const num = Number(price);
+    if (!Number.isFinite(num)) return '¥' + String(price || '') + '-';
+    return '¥' + num.toLocaleString('ja-JP') + '-';
+}
+
+function buildNimbotProductLines(record) {
+    const lines = [];
+    if (record.category) lines.push(String(record.category));
+    String(record.modelNumber || '').split(/\n+/).forEach(function(line) {
+        const t = line.trim();
+        if (t) lines.push(t);
+    });
+    if (record.operation) lines.push(String(record.operation));
+    return lines.slice(0, 3);
+}
+
+function drawNimbotBarcodeToCanvas(barcodeValue, maxWidth, height) {
+    const svgNS = 'http://www.w3.org/2000/svg';
+    const svg = document.createElementNS(svgNS, 'svg');
+    JsBarcode(svg, barcodeValue, {
+        format: 'CODE128',
+        displayValue: false,
+        margin: 0,
+        width: 1,
+        height: height,
+        background: '#ffffff',
+        lineColor: '#000000'
+    });
+
+    const tmp = document.createElement('canvas');
+    tmp.width = maxWidth;
+    tmp.height = height;
+    const ctx = tmp.getContext('2d');
+    ctx.fillStyle = '#ffffff';
+    ctx.fillRect(0, 0, maxWidth, height);
+
+    const xml = new XMLSerializer().serializeToString(svg);
+    const url = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(xml);
+    return new Promise(function(resolve, reject) {
+        const img = new Image();
+        img.onload = function() {
+            const scale = Math.min(maxWidth / img.width, height / img.height);
+            const w = Math.max(1, Math.floor(img.width * scale));
+            const h = Math.max(1, Math.floor(img.height * scale));
+            ctx.imageSmoothingEnabled = false;
+            ctx.drawImage(img, Math.floor((maxWidth - w) / 2), Math.floor((height - h) / 2), w, h);
+            resolve(tmp);
+        };
+        img.onerror = reject;
+        img.src = url;
+    });
+}
+
+// 添付レイアウト: T's time / 8桁 / 商品行 / ¥金額- / 注意文 / CODE128
+async function renderNimbotB1LabelCanvas(record) {
     await ensurePrintFontReady();
 
     const widthPx = NIMBOT_B1_SIZE.w_px;
     const heightPx = NIMBOT_B1_SIZE.h_px;
-    const margin = 8;
-    const contentWidth = widthPx - margin * 2;
-    const centerX = widthPx / 2;
+    const marginX = 10;
+    const marginY = 6;
+    const contentWidth = widthPx - marginX * 2;
     const fontFamily = MPB20_FONT_FAMILY;
 
     const canvas = document.createElement('canvas');
@@ -1330,51 +1553,56 @@ async function renderNimbotB1LabelCanvas(labelData) {
     ctx.fillStyle = '#000000';
     ctx.textBaseline = 'top';
 
-    let y = margin;
+    // 上段: 左 T's time / 右 8桁
+    ctx.font = 'bold 18px ' + MPB20_HEADER_FONT_FAMILY;
+    ctx.textAlign = 'left';
+    ctx.fillText("T's time", marginX, marginY);
+    ctx.font = 'bold 18px ' + fontFamily;
+    ctx.textAlign = 'right';
+    ctx.fillText(String(record.displayCode || '00000000'), widthPx - marginX, marginY);
 
-    drawFittedLine(ctx, labelData.headerLine, centerX, y, contentWidth, MPB20_HEADER_FONT_FAMILY, 18, 'bold');
-    y += 22;
+    let y = marginY + 24;
+    const productLines = buildNimbotProductLines(record);
+    while (productLines.length < 3) productLines.push('');
 
-    if (labelData.category) {
-        drawFittedLine(ctx, labelData.category, centerX, y, contentWidth, fontFamily, 14, 'bold');
-        y += 18;
-    }
-
-    const modelLines = labelData.modelLines.slice(0, 2);
-    modelLines.forEach(function(line) {
-        drawFittedLine(ctx, line, centerX, y, contentWidth, fontFamily, 15, 'bold');
-        y += 18;
+    productLines.slice(0, 3).forEach(function(line) {
+        if (line) {
+            let fontSize = 14;
+            ctx.font = 'bold ' + fontSize + 'px ' + fontFamily;
+            while (fontSize > 10 && ctx.measureText(line).width > contentWidth) {
+                fontSize -= 1;
+                ctx.font = 'bold ' + fontSize + 'px ' + fontFamily;
+            }
+            ctx.textAlign = 'left';
+            ctx.fillText(line, marginX, y);
+        }
+        y += 17;
     });
 
-    if (labelData.operationLines && labelData.operationLines.length) {
-        drawFittedLine(ctx, labelData.operationLines[0], centerX, y, contentWidth, fontFamily, 13, 'bold');
-        y += 16;
-    }
-
     y += 2;
-    drawFittedLine(ctx, labelData.desiredLine, centerX, y, contentWidth, fontFamily, 34, 'bold');
-    y += 40;
+    const priceText = formatNimbotPriceYen(record.desiredPrice);
+    let priceSize = 26;
+    ctx.font = 'bold ' + priceSize + 'px ' + fontFamily;
+    while (priceSize > 16 && ctx.measureText(priceText).width > contentWidth) {
+        priceSize -= 1;
+        ctx.font = 'bold ' + priceSize + 'px ' + fontFamily;
+    }
+    ctx.textAlign = 'left';
+    ctx.fillText(priceText, marginX, y);
+    y += priceSize + 6;
 
-    const qr = createPrintableQRCode(labelData.dataURL, 88);
-    const qrSize = Math.min(88, qr.size);
-    const qrX = Math.round(centerX - qrSize / 2);
-    const maxQrY = heightPx - margin - 18 - qrSize;
-    const qrY = Math.min(y, Math.max(margin, maxQrY));
+    ctx.font = '10px ' + MPB20_FONT_REGULAR_FAMILY;
+    ctx.textAlign = 'left';
+    NIMBOT_NOTICE_LINES.forEach(function(line) {
+        ctx.fillText(line, marginX, y);
+        y += 12;
+    });
 
+    y += 4;
+    const barcodeHeight = Math.max(36, Math.min(52, heightPx - y - marginY));
+    const barcodeCanvas = await drawNimbotBarcodeToCanvas(record.barcodeValue, contentWidth, barcodeHeight);
     ctx.imageSmoothingEnabled = false;
-    ctx.drawImage(qr.canvas, qrX, qrY, qrSize, qrSize);
-    ctx.imageSmoothingEnabled = true;
-
-    drawFittedLine(
-        ctx,
-        labelData.qrcodeNumber,
-        centerX,
-        qrY + qrSize + 2,
-        contentWidth,
-        MPB20_FONT_REGULAR_FAMILY,
-        12,
-        'normal'
-    );
+    ctx.drawImage(barcodeCanvas, marginX, y, contentWidth, barcodeHeight);
 
     await waitForNextFrame();
     return canvas;
@@ -2516,8 +2744,9 @@ function clearPendingQrData() {
     qrPasswordFailCount = 0;
 }
 
-function applyQrPayload(payload) {
+function applyQrPayload(payload, options) {
     if (!payload) return;
+    options = options || {};
 
     if (payload.serialNumber) {
         if (payload.validSerial !== null) {
@@ -2571,10 +2800,12 @@ function applyQrPayload(payload) {
         autoGrowTextarea(modelNumberField);
     }
 
-    const loadedSerial = payload.validSerial !== null
-        ? `（連番: ${String(payload.validSerial).padStart(5, '0')}）`
-        : '';
-    showMessage('QRコードから値札データを読み込みました' + loadedSerial, 'success');
+    if (!options.silent) {
+        const loadedSerial = payload.validSerial !== null
+            ? `（連番: ${String(payload.validSerial).padStart(5, '0')}）`
+            : '';
+        showMessage('QRコードから値札データを読み込みました' + loadedSerial, 'success');
+    }
     updatePreview();
 }
 
@@ -2709,6 +2940,20 @@ function cancelQrPasswordPrompt() {
 // URLパラメータから値札データを読み込む
 function loadFromURL() {
     const urlParams = new URLSearchParams(window.location.search);
+
+    // NIMBOTバーコード経由: ?b=ID または ?b=T1.xxx
+    const barcodeParam = urlParams.get('b');
+    if (barcodeParam) {
+        clearUrlParams();
+        const record = decodeNimbotBarcodeValue(barcodeParam);
+        if (record) {
+            applyNimbotBarcodeRecord(record);
+            return;
+        }
+        showMessage('バーコードデータが見つかりませんでした', 'error');
+        return;
+    }
+
     const encoded = urlParams.get('d');
 
     // 新形式（暗号化）: パスワード入力前に中身を復元しない
@@ -2769,9 +3014,10 @@ function loadFromURL() {
 }
 
 // 履歴に保存
-function saveToHistory(serialNumber, modelNumber, category, operation, purchasePrice, batteryCost, beltCost, desiredPrice) {
+function saveToHistory(serialNumber, modelNumber, category, operation, purchasePrice, batteryCost, beltCost, desiredPrice, extra) {
     try {
         const history = getHistory();
+        extra = extra || {};
         
         const historyItem = {
             date: new Date().toISOString(),
@@ -2783,7 +3029,9 @@ function saveToHistory(serialNumber, modelNumber, category, operation, purchaseP
             batteryCost: batteryCost || '',
             beltCost: beltCost || '',
             desiredPrice: desiredPrice,
-            printer: loadPrinterSelection()
+            printer: extra.printer || loadPrinterSelection(),
+            barcodeId: extra.barcodeId || '',
+            barcodeValue: extra.barcodeValue || ''
         };
         
         // 最新の履歴を先頭に追加
@@ -2809,6 +3057,115 @@ function getHistory() {
     } catch (error) {
         console.error('履歴読み込みエラー:', error);
         return [];
+    }
+}
+
+let barcodeScanStream = null;
+let barcodeScanTimer = null;
+let barcodeScanDetector = null;
+
+function setBarcodeScanStatus(text) {
+    const el = document.getElementById('barcodeScanStatus');
+    if (el) el.textContent = text || '';
+}
+
+function openBarcodeScanModal() {
+    const modal = document.getElementById('barcodeScanModal');
+    if (!modal) return;
+    modal.classList.add('active');
+    modal.setAttribute('aria-hidden', 'false');
+    const input = document.getElementById('barcodeScanInput');
+    if (input) input.value = '';
+    setBarcodeScanStatus('');
+    startBarcodeCamera();
+    const sideMenu = document.getElementById('sideMenu');
+    const overlay = document.getElementById('overlay');
+    if (sideMenu) sideMenu.classList.remove('active');
+    if (overlay) overlay.classList.remove('active');
+}
+
+function closeBarcodeScanModal() {
+    stopBarcodeCamera();
+    const modal = document.getElementById('barcodeScanModal');
+    if (!modal) return;
+    modal.classList.remove('active');
+    modal.setAttribute('aria-hidden', 'true');
+}
+
+function submitBarcodeScanInput() {
+    const input = document.getElementById('barcodeScanInput');
+    const code = input ? input.value.trim() : '';
+    if (!code) {
+        setBarcodeScanStatus('バーコードを入力してください');
+        return;
+    }
+    handleScannedBarcode(code);
+}
+
+function handleScannedBarcode(code) {
+    const record = decodeNimbotBarcodeValue(code);
+    if (!record) {
+        setBarcodeScanStatus('データが見つかりません。この端末で印字したバーコードか確認してください。');
+        showMessage('バーコードデータを読み取れませんでした', 'error');
+        return;
+    }
+    closeBarcodeScanModal();
+    applyNimbotBarcodeRecord(record);
+}
+
+async function startBarcodeCamera() {
+    stopBarcodeCamera();
+    const video = document.getElementById('barcodeScanVideo');
+    if (!video) return;
+
+    if (!window.BarcodeDetector) {
+        setBarcodeScanStatus('この端末はカメラ読取未対応です。下に番号を入力してください。');
+        return;
+    }
+
+    try {
+        barcodeScanDetector = new BarcodeDetector({
+            formats: ['code_128', 'code_39', 'ean_13', 'ean_8', 'qr_code']
+        });
+        barcodeScanStream = await navigator.mediaDevices.getUserMedia({
+            audio: false,
+            video: { facingMode: { ideal: 'environment' } }
+        });
+        video.srcObject = barcodeScanStream;
+        await video.play();
+        setBarcodeScanStatus('カメラでバーコードを枠に合わせてください');
+
+        barcodeScanTimer = setInterval(async function() {
+            if (!barcodeScanDetector || !video || video.readyState < 2) return;
+            try {
+                const codes = await barcodeScanDetector.detect(video);
+                if (codes && codes.length && codes[0].rawValue) {
+                    handleScannedBarcode(codes[0].rawValue);
+                }
+            } catch (e) {
+                // 連続検出中の一時エラーは無視
+            }
+        }, 700);
+    } catch (error) {
+        console.warn('バーコードカメラ起動失敗', error);
+        setBarcodeScanStatus('カメラを開けませんでした。番号入力を使ってください。');
+    }
+}
+
+function stopBarcodeCamera() {
+    if (barcodeScanTimer) {
+        clearInterval(barcodeScanTimer);
+        barcodeScanTimer = null;
+    }
+    barcodeScanDetector = null;
+    const video = document.getElementById('barcodeScanVideo');
+    if (barcodeScanStream) {
+        barcodeScanStream.getTracks().forEach(function(track) { track.stop(); });
+        barcodeScanStream = null;
+    }
+    if (video) {
+        video.pause();
+        video.srcObject = null;
     }
 }
 
@@ -2954,6 +3311,7 @@ function closeHistoryModal() {
     modal.classList.remove('active');
     // パスワード確認中でなければオーバーレイも閉じる
     if (!document.getElementById('passwordModal').classList.contains('active') &&
+        !document.getElementById('barcodeScanModal').classList.contains('active') &&
         !document.getElementById('sideMenu').classList.contains('active')) {
         overlay.classList.remove('active');
     }
