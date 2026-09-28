@@ -33,12 +33,56 @@ function loadSerialNumber() {
     return saved ? parseInt(saved) : 1;
 }
 
+// QRやバーコードから読み込んだ品は、その印字だけ既存の連番を使う。
+// 次に採番する連番自体は上書きせず、印字が終わったら元の連番を表示する。
+let reprintSerial = null;
+
+function serialForPrint() {
+    return reprintSerial != null ? reprintSerial : loadSerialNumber();
+}
+
+function armReprintSerial(serial) {
+    const n = Number(serial);
+    if (!Number.isSafeInteger(n) || n <= 0) return;
+    if (n === loadSerialNumber()) {
+        reprintSerial = null;
+        return;
+    }
+    reprintSerial = n;
+}
+
+function clearReprintSerial() {
+    reprintSerial = null;
+}
+
 function updateSerialDisplay() {
-    const currentSerial = loadSerialNumber();
     const display = document.getElementById('currentSerial');
     if (display) {
-        display.textContent = currentSerial;
+        display.textContent = serialForPrint();
     }
+}
+
+// 通常の印字は連番を1進める。読み取り再印字は元の連番へ戻す。
+function finishPrintSerial(printedSerial) {
+    const printed = parseInt(printedSerial, 10);
+    const base = loadSerialNumber();
+    if (reprintSerial != null && printed === reprintSerial && printed !== base) {
+        reprintSerial = null;
+        updateSerialDisplay();
+        return { serial: base, restored: true };
+    }
+    reprintSerial = null;
+    const next = (Number.isFinite(printed) ? printed : base) + 1;
+    saveSerialNumber(next);
+    updateSerialDisplay();
+    return { serial: next, restored: false };
+}
+
+function serialUpdatePhrase(result) {
+    if (result.restored) {
+        return '連番を ' + result.serial + ' に戻しました。';
+    }
+    return '連番を ' + result.serial + ' に更新しました。';
 }
 
 // プリンター選択の保存と読み込み
@@ -245,6 +289,7 @@ document.addEventListener('DOMContentLoaded', function() {
     document.getElementById('setSerialNumber').addEventListener('click', function() {
         const newSerial = document.getElementById('menuSerialNumber').value;
         if (newSerial && parseInt(newSerial) > 0) {
+            clearReprintSerial();
             saveSerialNumber(newSerial);
             updateSerialDisplay();
             updatePreview();
@@ -258,6 +303,7 @@ document.addEventListener('DOMContentLoaded', function() {
     // 連番リセットボタン
     document.getElementById('resetSerialNumber').addEventListener('click', function() {
         if (confirm('連番を1にリセットしますか？')) {
+            clearReprintSerial();
             saveSerialNumber(1);
             updateSerialDisplay();
             updatePreview();
@@ -448,7 +494,7 @@ function updatePreview() {
 
 // 印刷関数
 function printLabel() {
-    const serialNumber = loadSerialNumber().toString();
+    const serialNumber = String(serialForPrint());
     const modelNumber = document.getElementById('modelNumber').value;
     const categoryType = document.getElementById('categoryType').value;
     const otherCategory = document.getElementById('otherCategory').value;
@@ -861,12 +907,10 @@ async function printWithPrintAssist(serialNumber, modelNumber, category, operati
 
         saveToHistory(serialNumber, modelNumber, category, operation, purchasePrice, batteryCost, beltCost, desiredPrice);
 
-        const newSerial = parseInt(serialNumber) + 1;
-        saveSerialNumber(newSerial);
-        updateSerialDisplay();
+        const advanced = finishPrintSerial(serialNumber);
         updatePreview();
 
-        showMessage('印刷データを送信しました。連番を ' + newSerial + ' に更新しました。', 'success');
+        showMessage('印刷データを送信しました。' + serialUpdatePhrase(advanced), 'success');
 
     } catch (error) {
         console.error('=== TM Print Assistant印刷エラー ===', error);
@@ -916,12 +960,10 @@ async function printWithTMAssistant(serialNumber, modelNumber, category, operati
 
         saveToHistory(serialNumber, modelNumber, category, operation, purchasePrice, batteryCost, beltCost, desiredPrice);
 
-        const newSerial = parseInt(serialNumber) + 1;
-        saveSerialNumber(newSerial);
-        updateSerialDisplay();
+        const advanced = finishPrintSerial(serialNumber);
         updatePreview();
 
-        showMessage('印刷データを送信しました。連番を ' + newSerial + ' に更新しました。', 'success');
+        showMessage('印刷データを送信しました。' + serialUpdatePhrase(advanced), 'success');
 
     } catch (error) {
         console.error('=== TM Assistant印刷エラー ===', error);
@@ -973,9 +1015,7 @@ async function printWithMPB20(serialNumber, modelNumber, category, operation, pu
         console.log('MP-B20 URL scheme length:', printURL.length);
 
         saveToHistory(serialNumber, modelNumber, category, operation, purchasePrice, batteryCost, beltCost, desiredPrice);
-        const newSerial = parseInt(serialNumber, 10) + 1;
-        saveSerialNumber(newSerial);
-        updateSerialDisplay();
+        const advanced = finishPrintSerial(serialNumber);
         updatePreview();
 
         setTimeout(function() {
@@ -985,7 +1025,7 @@ async function printWithMPB20(serialNumber, modelNumber, category, operation, pu
             document.body.appendChild(link);
             link.click();
             document.body.removeChild(link);
-            showMessage('SII URL Print Agentへ送信しました。連番を ' + newSerial + ' に更新しました。', 'success');
+            showMessage('SII URL Print Agentへ送信しました。' + serialUpdatePhrase(advanced), 'success');
         }, 300);
     } catch (error) {
         console.error('=== MP-B20印刷エラー ===', error);
@@ -1034,9 +1074,7 @@ async function printWithSMS210i(serialNumber, modelNumber, category, operation, 
         }
 
         saveToHistory(serialNumber, modelNumber, category, operation, purchasePrice, batteryCost, beltCost, desiredPrice);
-        const newSerial = parseInt(serialNumber, 10) + 1;
-        saveSerialNumber(newSerial);
-        updateSerialDisplay();
+        const advanced = finishPrintSerial(serialNumber);
         updatePreview();
 
         setTimeout(function() {
@@ -1046,7 +1084,7 @@ async function printWithSMS210i(serialNumber, modelNumber, category, operation, 
             document.body.appendChild(link);
             link.click();
             document.body.removeChild(link);
-            showMessage('Star PassPRNTへ送信しました。連番を ' + newSerial + ' に更新しました。', 'success');
+            showMessage('Star PassPRNTへ送信しました。' + serialUpdatePhrase(advanced), 'success');
         }, 300);
     } catch (error) {
         console.error('=== SM-S210i印刷エラー ===', error);
@@ -1397,6 +1435,10 @@ async function printWithNimbotB1(serialNumber, modelNumber, category, operation,
             setTimeout(function() {
                 openNimbotPrintInBluefy(pageUrl);
             }, 150);
+            // 読み取り再印字は、送信後にメニューの連番を元へ戻す
+            if (reprintSerial != null) {
+                finishPrintSerial(serialNumber);
+            }
             return;
         }
 
@@ -1506,15 +1548,13 @@ async function printWithNimbotB1(serialNumber, modelNumber, category, operation,
         }
 
         saveToHistory(serialNumber, modelNumber, category, operation, purchasePrice, batteryCost, beltCost, desiredPrice, historyExtra);
-        const newSerial = parseInt(serialNumber, 10) + 1;
-        saveSerialNumber(newSerial);
-        updateSerialDisplay();
+        const advanced = finishPrintSerial(serialNumber);
         updatePreview();
         showMessage(
             (paperMode === 'continuous'
                 ? 'NIMBOT B1（連続紙）へ印字しました。'
                 : 'NIMBOT B1へ印字しました。') +
-            '連番を ' + newSerial + ' に更新しました。',
+            serialUpdatePhrase(advanced),
             'success'
         );
 
@@ -2882,11 +2922,10 @@ function executePrint(eposDevice, serialNumber, modelNumber, purchasePrice, batt
                 printerObj.send();
                 
                 showMessage('印刷を開始しました！', 'success');
-                
-                // 連番を自動的に1増やす
-                saveSerialNumber(parseInt(serialNumber) + 1);
-                updateSerialDisplay();
+
+                const advanced = finishPrintSerial(serialNumber);
                 updatePreview();
+                showMessage(serialUpdatePhrase(advanced), 'success');
                 
                 eposDevice.disconnect();
             } else {
@@ -2899,6 +2938,8 @@ function executePrint(eposDevice, serialNumber, modelNumber, purchasePrice, batt
 
 // フォームクリア関数
 function clearForm() {
+    clearReprintSerial();
+    updateSerialDisplay();
     document.getElementById('modelNumber').value = '';
     autoGrowTextarea(document.getElementById('modelNumber'));
     document.getElementById('categoryType').selectedIndex = 0;
@@ -3077,7 +3118,8 @@ function applyQrPayload(payload, options) {
 
     if (payload.serialNumber) {
         if (payload.validSerial !== null) {
-            saveSerialNumber(payload.validSerial);
+            // 次に使う連番は保存したまま。この印字の間だけ読み取った連番を使う
+            armReprintSerial(payload.validSerial);
             updateSerialDisplay();
         } else {
             console.warn('QRコードの連番が不正なため読み込みません:', payload.serialNumber);
@@ -3652,11 +3694,11 @@ function loadFromHistory(item) {
     document.getElementById('beltCost').value = item.beltCost || '';
     document.getElementById('desiredPrice').value = item.desiredPrice;
 
-    // 履歴の連番を現在の連番として復元する（その連番のまま再印刷できるようにする）
+    // 履歴の連番で再印字する。次に使う連番は印字後に戻す
     if (item.serialNumber !== undefined && item.serialNumber !== null && item.serialNumber !== '') {
         const parsedSerial = Number(String(item.serialNumber).replace(/[^\d]/g, ''));
         if (Number.isSafeInteger(parsedSerial) && parsedSerial > 0) {
-            saveSerialNumber(parsedSerial);
+            armReprintSerial(parsedSerial);
             updateSerialDisplay();
         }
     }
