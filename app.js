@@ -2487,19 +2487,40 @@ function canvasToEposMonoRaster(canvas) {
     };
 }
 
+// Epson 58mm（TM-m30III 等）の印字幅。MP-B20の内容幅384ドットを中央に置く
+const TM_58MM_PRINT_WIDTH_PX = 420;
+const TM_CONTENT_WIDTH_PX = 384; // MP-B20と同じ印字内容幅
+
+// 内容キャンバスをプリンター印字幅の中央へ配置（左寄り防止）
+function centerCanvasOnPrintWidth(sourceCanvas, printWidthPx) {
+    const targetWidth = Math.max(sourceCanvas.width, printWidthPx | 0);
+    if (sourceCanvas.width === targetWidth) return sourceCanvas;
+
+    const out = document.createElement('canvas');
+    out.width = targetWidth;
+    out.height = sourceCanvas.height;
+    const ctx = out.getContext('2d');
+    ctx.fillStyle = '#ffffff';
+    ctx.fillRect(0, 0, out.width, out.height);
+    const x = Math.round((targetWidth - sourceCanvas.width) / 2);
+    ctx.drawImage(sourceCanvas, x, 0);
+    return out;
+}
+
 // TM Print Assistant / TM Assistant向け：綺麗なBIZ UD字形を画像として送る。
-// 1枚の巨大画像だとTM-P20II側のバッファで下部が途切れやすいので、
-// 横帯に分けて連続送信し、最後に紙送りしてからカットする
+// 1枚の巨大画像だとバッファで下部が途切れやすいので、
+// 横帯に分けて連続送信し、最後にカットする
 function buildEposRasterPrintXml(raster, options) {
     options = options || {};
     // 帯の高さは8の倍数。小さすぎるとXMLが冗長、大きすぎるとバッファ溢れ
     const bandHeight = options.bandHeight != null ? options.bandHeight : 192;
-    // 管理番号の下を確実に排紙口まで出す（ドット単位。8ドット=1mm）
-    const bottomFeedUnits = options.bottomFeedUnits != null ? options.bottomFeedUnits : 64;
+    // 画像内余白と合わせて上下が均一になるよう、追加フィードは最小限にする
+    const bottomFeedUnits = options.bottomFeedUnits != null ? options.bottomFeedUnits : 0;
+    const cutType = options.cutType || 'feed';
 
     let xml = '<?xml version="1.0" encoding="utf-8"?>';
     xml += '<epos-print xmlns="http://www.epson-pos.com/schemas/2011/03/epos-print">';
-    xml += '<text align="left"/>';
+    xml += '<text align="center"/>';
 
     const rowBytes = raster.rowBytes || (raster.width / 8);
     const bytes = raster.bytes;
@@ -2517,8 +2538,10 @@ function buildEposRasterPrintXml(raster, options) {
         }
     }
 
-    xml += '<feed unit="' + bottomFeedUnits + '"/>';
-    xml += '<cut type="feed"/>';
+    if (bottomFeedUnits > 0) {
+        xml += '<feed unit="' + bottomFeedUnits + '"/>';
+    }
+    xml += '<cut type="' + cutType + '"/>';
     xml += '</epos-print>';
     return xml;
 }
@@ -2531,15 +2554,23 @@ async function buildTmRasterPrintXml(serialNumber, modelNumber, category, operat
         serialNumber, modelNumber, category, operation,
         purchasePrice, batteryCost, beltCost, desiredPrice
     );
-    // 下部が切れないよう管理番号下に十分な余白。データ量は倍率2で抑える
-    const canvas = await renderThermalLabelCanvas(labelData, {
-        paddingBottom: 10 * 8,
+    // MP-B20見本に合わせ、内容は384幅・上下余白を揃える。
+    // TM-m30III(58mm)は420ドット幅なので中央配置する。
+    // カット前の大きな追加フィードは下部だけ余白が増える原因になるため使わない。
+    const contentCanvas = await renderThermalLabelCanvas(labelData, {
+        paddingTop: 2 * 8,
+        paddingBottom: 2 * 8,
         supersample: 2
     });
+    if (contentCanvas.width !== TM_CONTENT_WIDTH_PX) {
+        console.warn('TM内容幅が想定外です:', contentCanvas.width);
+    }
+    const canvas = centerCanvasOnPrintWidth(contentCanvas, TM_58MM_PRINT_WIDTH_PX);
     const raster = canvasToEposMonoRaster(canvas);
     const xml = buildEposRasterPrintXml(raster, {
         bandHeight: 192,
-        bottomFeedUnits: 64
+        bottomFeedUnits: 0,
+        cutType: 'feed'
     });
     return { xml: xml, raster: raster, labelData: labelData };
 }
