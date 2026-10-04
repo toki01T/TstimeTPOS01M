@@ -2490,6 +2490,10 @@ function canvasToEposMonoRaster(canvas) {
 // Epson 58mm（TM-m30III 等）の印字幅。MP-B20の内容幅384ドットを中央に置く
 const TM_58MM_PRINT_WIDTH_PX = 420;
 const TM_CONTENT_WIDTH_PX = 384; // MP-B20と同じ印字内容幅
+// ヘッド〜カッター間隔（TM-m30系 約9.5mm）。この分を画像下余白にし no_feed で切ると次票の上部が短くなる
+const TM_HEAD_TO_CUTTER_PX = 76;
+// 上部をさらに約2mm詰める（次票の印字開始位置を寄せる）
+const TM_TOP_TRIM_PX = 16;
 
 // 内容キャンバスをプリンター印字幅の中央へ配置（左寄り防止）
 function centerCanvasOnPrintWidth(sourceCanvas, printWidthPx) {
@@ -2507,16 +2511,53 @@ function centerCanvasOnPrintWidth(sourceCanvas, printWidthPx) {
     return out;
 }
 
+// 上端の白行だけを最大 maxTrimPx まで切り詰める（文字は切らない）
+function trimLeadingWhiteRows(canvas, maxTrimPx) {
+    const maxTrim = Math.max(0, maxTrimPx | 0);
+    if (!maxTrim || !canvas.height) return canvas;
+
+    const ctx = canvas.getContext('2d', { willReadFrequently: true });
+    const width = canvas.width;
+    const height = canvas.height;
+    const data = ctx.getImageData(0, 0, width, Math.min(height, maxTrim)).data;
+    let trim = 0;
+
+    for (let y = 0; y < maxTrim && y < height; y++) {
+        let hasInk = false;
+        for (let x = 0; x < width; x++) {
+            const i = (y * width + x) * 4;
+            const lum = data[i] * 0.299 + data[i + 1] * 0.587 + data[i + 2] * 0.114;
+            if (data[i + 3] > 32 && lum < 200) {
+                hasInk = true;
+                break;
+            }
+        }
+        if (hasInk) break;
+        trim += 1;
+    }
+
+    if (trim <= 0) return canvas;
+
+    const out = document.createElement('canvas');
+    out.width = width;
+    out.height = height - trim;
+    out.getContext('2d').drawImage(
+        canvas,
+        0, trim, width, out.height,
+        0, 0, width, out.height
+    );
+    return out;
+}
+
 // TM Print Assistant / TM Assistant向け：綺麗なBIZ UD字形を画像として送る。
-// 1枚の巨大画像だとバッファで下部が途切れやすいので、
-// 横帯に分けて連続送信し、最後にカットする
+// TM-m30IIIは一度に大きな画像を受けられるので、分割を減らして転送を速くする。
 function buildEposRasterPrintXml(raster, options) {
     options = options || {};
-    // 帯の高さは8の倍数。小さすぎるとXMLが冗長、大きすぎるとバッファ溢れ
-    const bandHeight = options.bandHeight != null ? options.bandHeight : 192;
-    // 画像内余白と合わせて上下が均一になるよう、追加フィードは最小限にする
+    // 帯の高さ。未指定時は1枚送り（速い）。古い機種向けに分割したいときだけ指定する
+    const bandHeight = options.bandHeight != null ? options.bandHeight : raster.height;
     const bottomFeedUnits = options.bottomFeedUnits != null ? options.bottomFeedUnits : 0;
-    const cutType = options.cutType || 'feed';
+    // no_feed: 画像下余白＝ヘッド〜カッター分にして切ると、次票の上部余白が短くなる
+    const cutType = options.cutType || 'no_feed';
 
     let xml = '<?xml version="1.0" encoding="utf-8"?>';
     xml += '<epos-print xmlns="http://www.epson-pos.com/schemas/2011/03/epos-print">';
@@ -2524,13 +2565,14 @@ function buildEposRasterPrintXml(raster, options) {
 
     const rowBytes = raster.rowBytes || (raster.width / 8);
     const bytes = raster.bytes;
-    if (!bytes) {
+    const step = Math.max(8, bandHeight | 0);
+    if (!bytes || step >= raster.height) {
         xml += '<image width="' + raster.width + '" height="' + raster.height + '" color="color_1" mode="mono">';
-        xml += raster.data;
+        xml += bytes ? bytesToBase64(bytes) : raster.data;
         xml += '</image>';
     } else {
-        for (let y = 0; y < raster.height; y += bandHeight) {
-            const h = Math.min(bandHeight, raster.height - y);
+        for (let y = 0; y < raster.height; y += step) {
+            const h = Math.min(step, raster.height - y);
             const slice = bytes.subarray(y * rowBytes, (y + h) * rowBytes);
             xml += '<image width="' + raster.width + '" height="' + h + '" color="color_1" mode="mono">';
             xml += bytesToBase64(slice);
@@ -2541,6 +2583,8 @@ function buildEposRasterPrintXml(raster, options) {
     if (bottomFeedUnits > 0) {
         xml += '<feed unit="' + bottomFeedUnits + '"/>';
     }
+    // no_feed: 画像下にヘッド〜カッター分の余白を持たせて切る。
+    // 余分な feed カットより次票の上部余白が短くなる。
     xml += '<cut type="' + cutType + '"/>';
     xml += '</epos-print>';
     return xml;
@@ -2554,22 +2598,24 @@ async function buildTmRasterPrintXml(serialNumber, modelNumber, category, operat
         serialNumber, modelNumber, category, operation,
         purchasePrice, batteryCost, beltCost, desiredPrice
     );
-    // MP-B20見本に合わせ、内容は384幅。TM-m30III(58mm)は420ドット幅へ中央配置。
-    // 上部は約3mm短くし、下部余白は維持。カット前の大きな追加フィードは使わない。
+    // 内容はMP-B20と同じ384幅を420幅へ中央配置。
+    // 上部は白行トリム＋ no_feed カットで約2mm詰め、下余白はヘッド〜カッター分だけにする。
+    // 画像は1枚送信にして印字待ちを短くする（TM-m30IIIは4MBまで可）。
     const contentCanvas = await renderThermalLabelCanvas(labelData, {
         paddingTop: 0,
-        paddingBottom: 2 * 8,
+        paddingBottom: TM_HEAD_TO_CUTTER_PX,
         supersample: 2
     });
     if (contentCanvas.width !== TM_CONTENT_WIDTH_PX) {
         console.warn('TM内容幅が想定外です:', contentCanvas.width);
     }
-    const canvas = centerCanvasOnPrintWidth(contentCanvas, TM_58MM_PRINT_WIDTH_PX);
+    const trimmed = trimLeadingWhiteRows(contentCanvas, TM_TOP_TRIM_PX);
+    const canvas = centerCanvasOnPrintWidth(trimmed, TM_58MM_PRINT_WIDTH_PX);
     const raster = canvasToEposMonoRaster(canvas);
     const xml = buildEposRasterPrintXml(raster, {
-        bandHeight: 192,
+        bandHeight: raster.height,
         bottomFeedUnits: 0,
-        cutType: 'feed'
+        cutType: 'no_feed'
     });
     return { xml: xml, raster: raster, labelData: labelData };
 }
