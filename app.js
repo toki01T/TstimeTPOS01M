@@ -2122,13 +2122,8 @@ function reduceBandToDots(bandCtx, supersample, sourceTop, widthPx, height, outp
 
 // 印字幅を超える行はフォントを縮めて必ず収める
 function drawFittedLine(ctx, text, centerX, y, maxWidth, fontFamily, size, weight) {
-    let fontSize = size;
-    applyMpb20Font(ctx, fontFamily, fontSize, weight);
-    while (fontSize > 12 && ctx.measureText(text).width > maxWidth) {
-        fontSize -= 1;
-        applyMpb20Font(ctx, fontFamily, fontSize, weight);
-    }
-    drawCenteredLine(ctx, text, centerX, y);
+    // 細い画線・濁点が二値化で欠けて掠れないよう、安定描画を使う
+    drawStablePrintLine(ctx, text, centerX, y, maxWidth, fontFamily, size, weight);
 }
 
 // 外部CDNではなく同梱した公式TTFを固有名で登録する。
@@ -2455,7 +2450,7 @@ function bytesToBase64(bytes) {
 }
 
 // キャンバスをePOS-Print用の1bitラスタ（横8ドット単位）へ変換する
-function canvasToEposMonoRaster(canvas) {
+function canvasToEposMonoRaster(canvas, inkThreshold) {
     const width = canvas.width;
     const height = canvas.height;
     const paddedWidth = Math.ceil(width / 8) * 8;
@@ -2463,6 +2458,8 @@ function canvasToEposMonoRaster(canvas) {
     const imageData = ctx.getImageData(0, 0, width, height).data;
     const rowBytes = paddedWidth / 8;
     const bytes = new Uint8Array(rowBytes * height);
+    // 高めにすると細い線が残り、掠れにくい（潰れる場合は下げる）
+    const threshold = inkThreshold != null ? inkThreshold : 175;
 
     for (let y = 0; y < height; y++) {
         for (let x = 0; x < paddedWidth; x++) {
@@ -2470,7 +2467,7 @@ function canvasToEposMonoRaster(canvas) {
             if (x < width) {
                 const i = (y * width + x) * 4;
                 const lum = imageData[i] * 0.299 + imageData[i + 1] * 0.587 + imageData[i + 2] * 0.114;
-                black = lum < 160;
+                black = lum < threshold;
             }
             if (black) {
                 bytes[y * rowBytes + (x >> 3)] |= (0x80 >> (x & 7));
@@ -2506,6 +2503,8 @@ function centerCanvasOnPrintWidth(sourceCanvas, printWidthPx) {
     const ctx = out.getContext('2d');
     ctx.fillStyle = '#ffffff';
     ctx.fillRect(0, 0, out.width, out.height);
+    // 補間すると二値化済みの黒が灰色になり、再二値化で掠れる
+    ctx.imageSmoothingEnabled = false;
     const x = Math.round((targetWidth - sourceCanvas.width) / 2);
     ctx.drawImage(sourceCanvas, x, 0);
     return out;
@@ -2541,7 +2540,9 @@ function trimLeadingWhiteRows(canvas, maxTrimPx) {
     const out = document.createElement('canvas');
     out.width = width;
     out.height = height - trim;
-    out.getContext('2d').drawImage(
+    const outCtx = out.getContext('2d');
+    outCtx.imageSmoothingEnabled = false;
+    outCtx.drawImage(
         canvas,
         0, trim, width, out.height,
         0, 0, width, out.height
@@ -2600,18 +2601,19 @@ async function buildTmRasterPrintXml(serialNumber, modelNumber, category, operat
     );
     // 内容はMP-B20と同じ384幅を420幅へ中央配置。
     // 上部は白行トリム＋ no_feed カットで約2mm詰め、下余白はヘッド〜カッター分だけにする。
-    // 画像は1枚送信にして印字待ちを短くする（TM-m30IIIは4MBまで可）。
+    // 画像は1枚送信。掠れ防止のため描画倍率はMP-B20と同じ3、二値化もやや濃いめ。
     const contentCanvas = await renderThermalLabelCanvas(labelData, {
         paddingTop: 0,
         paddingBottom: TM_HEAD_TO_CUTTER_PX,
-        supersample: 2
+        supersample: 3,
+        inkThreshold: 155
     });
     if (contentCanvas.width !== TM_CONTENT_WIDTH_PX) {
         console.warn('TM内容幅が想定外です:', contentCanvas.width);
     }
     const trimmed = trimLeadingWhiteRows(contentCanvas, TM_TOP_TRIM_PX);
     const canvas = centerCanvasOnPrintWidth(trimmed, TM_58MM_PRINT_WIDTH_PX);
-    const raster = canvasToEposMonoRaster(canvas);
+    const raster = canvasToEposMonoRaster(canvas, 175);
     const xml = buildEposRasterPrintXml(raster, {
         bandHeight: raster.height,
         bottomFeedUnits: 0,
