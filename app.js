@@ -2554,11 +2554,10 @@ async function buildTmRasterPrintXml(serialNumber, modelNumber, category, operat
         serialNumber, modelNumber, category, operation,
         purchasePrice, batteryCost, beltCost, desiredPrice
     );
-    // MP-B20見本に合わせ、内容は384幅・上下余白を揃える。
-    // TM-m30III(58mm)は420ドット幅なので中央配置する。
-    // カット前の大きな追加フィードは下部だけ余白が増える原因になるため使わない。
+    // MP-B20見本に合わせ、内容は384幅。TM-m30III(58mm)は420ドット幅へ中央配置。
+    // 上部は約3mm短くし、下部余白は維持。カット前の大きな追加フィードは使わない。
     const contentCanvas = await renderThermalLabelCanvas(labelData, {
-        paddingTop: 2 * 8,
+        paddingTop: 0,
         paddingBottom: 2 * 8,
         supersample: 2
     });
