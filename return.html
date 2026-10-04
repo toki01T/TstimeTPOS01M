@@ -136,8 +136,11 @@
             var params = new URLSearchParams(window.location.search);
             var target = params.get('to') || 'webapp://toki01t.github.io/TstimeTPOS01M/';
             var alternate = params.get('alt') || '';
+            var httpsApp = params.get('https') || '';
             var shortcutName = params.get('sc') || 'Tstime';
-            var fromNimbot = params.get('from') === 'nimbot';
+            var from = params.get('from') || '';
+            var fromNimbot = from === 'nimbot';
+            var fromPrint = from === 'print';
             var shortcutUrl = 'shortcuts://run-shortcut?name=' + encodeURIComponent(shortcutName);
 
             function toXSafari(url) {
@@ -153,6 +156,8 @@
                 safariTarget = alternate;
             } else if (/^https?:\/\//i.test(alternate)) {
                 safariTarget = toXSafari(alternate);
+            } else if (/^https?:\/\//i.test(httpsApp)) {
+                safariTarget = toXSafari(httpsApp);
             } else if (/^https?:\/\//i.test(target)) {
                 safariTarget = toXSafari(target);
             }
@@ -161,15 +166,25 @@
             var retryAlt = document.getElementById('retryAlt');
             var viaShortcut = document.getElementById('viaShortcut');
 
-            // 主ボタン: Safari戻り（Bluefyから）/ webapp://（ホーム画面）
-            retry.href = safariTarget || target || '#';
-            retry.textContent = safariTarget ? 'Safariに戻る' : '直接アプリに戻る';
+            // 主ボタン: ホーム画面アプリ(webapp://) / Safari戻り
+            retry.href = target || safariTarget || '#';
+            retry.textContent = /^webapp:/i.test(target) ? '直接アプリに戻る' : (safariTarget ? 'Safariに戻る' : '直接アプリに戻る');
 
-            retryAlt.href = alternate && alternate !== retry.href ? alternate : (target !== retry.href ? target : '#');
-            if (!retryAlt.href || retryAlt.href === '#' || retryAlt.getAttribute('href') === retry.getAttribute('href')) {
+            var altHref = '';
+            if (safariTarget && safariTarget !== retry.getAttribute('href')) {
+                altHref = safariTarget;
+            } else if (alternate && alternate !== retry.getAttribute('href')) {
+                altHref = alternate;
+            } else if (httpsApp && httpsApp !== retry.getAttribute('href')) {
+                altHref = httpsApp;
+            }
+            retryAlt.href = altHref || '#';
+            if (!altHref) {
                 retryAlt.style.display = 'none';
             } else {
-                retryAlt.textContent = '別の形式で戻る';
+                retryAlt.textContent = /^x-safari-/i.test(altHref) || /^https?:/i.test(altHref)
+                    ? 'Safariで開く'
+                    : '別の形式で戻る';
             }
 
             viaShortcut.href = shortcutUrl;
@@ -180,9 +195,13 @@
             if (fromNimbot) {
                 document.querySelector('h1').textContent = 'NIMBOT印字が完了しました';
                 document.getElementById('status').textContent = '元のアプリへ戻しています…';
+            } else if (fromPrint) {
+                document.querySelector('h1').textContent = '印刷が完了しました';
+                document.getElementById('status').textContent = 'Webアプリへ戻しています…';
             }
 
-            // Bluefyからの場合は Safari を先に試し、続けてショートカット
+            // Bluefy: Safari を先に試し、続けてショートカット
+            // 印刷アプリ戻り: ショートカット → webapp:// の順でホーム画面アプリを開く
             if (fromNimbot && safariTarget) {
                 window.location.replace(safariTarget);
                 setTimeout(function () {
@@ -190,12 +209,17 @@
                 }, 1200);
             } else {
                 window.location.replace(shortcutUrl);
+                setTimeout(function () {
+                    if (/^webapp:/i.test(target)) {
+                        window.location.href = target;
+                    }
+                }, 1400);
             }
 
             setTimeout(function () {
                 document.getElementById('status').textContent =
                     '自動で開けませんでした。下のボタンからお戻りください。';
-            }, 1800);
+            }, 2200);
         })();
     </script>
 </body>

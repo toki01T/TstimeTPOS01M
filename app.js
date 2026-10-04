@@ -808,16 +808,26 @@ function getHttpsAppUrl() {
     return window.location.origin + window.location.pathname;
 }
 
-// 印刷アプリからの戻り先URL。
-// iOSのホーム画面アプリはショートカット経由、AndroidのPWAはhttpsのまま戻す
+// 印刷アプリ（TM Print Assistant等）へ渡す戻り先。
+// iOSの中継アプリは https しか開けないことが多く、shortcuts:// を渡すと戻れない。
+// そのため https の return.html を渡し、そこでショートカット／webapp:// へつなぐ。
+function buildPrintReturnPageUrl(fromTag) {
+    const page = new URL('return.html', window.location.href);
+    const webApps = buildWebAppReturnUrls();
+    page.searchParams.set('to', webApps.primary);
+    page.searchParams.set('alt', webApps.alternate || getHttpsAppUrl());
+    page.searchParams.set('https', getHttpsAppUrl());
+    page.searchParams.set('sc', RETURN_SHORTCUT_NAME);
+    page.searchParams.set('from', fromTag || 'print');
+    return page.toString();
+}
+
 function getPrintReturnUrl() {
-    if (isStandaloneWebApp()) {
-        if (isAndroidDevice()) {
-            return getHttpsAppUrl();
-        }
-        if (isIosDevice()) {
-            return getShortcutReturnUrl();
-        }
+    if (isAndroidDevice()) {
+        return getHttpsAppUrl();
+    }
+    if (isIosDevice()) {
+        return buildPrintReturnPageUrl('print');
     }
     return getHttpsAppUrl();
 }
@@ -827,7 +837,7 @@ function getReturnHintText() {
         return 'AndroidではChromeメニュー「アプリをインストール」または「ホーム画面に追加」で使えます。印刷後は同じアプリへ戻ります。';
     }
     if (isIosDevice()) {
-        return '印刷後と同じく、ショートカット「Tstime」が自動で開きます';
+        return '印刷後は中継ページ経由でアプリへ戻ります。初回はショートカット「Tstime」の作成が必要です。';
     }
     return '印刷後の戻り方は端末により異なります';
 }
@@ -885,32 +895,27 @@ async function printWithPrintAssist(serialNumber, modelNumber, category, operati
         console.log('URLエンコード完了 / 文字数:', encodedXML.length);
 
         const returnUrl = getPrintReturnUrl();
-        const successParam = returnUrl ? `success=${encodeURIComponent(returnUrl)}&` : '';
-        const printURL = `tmprintassistant://tmprintassistant.epson.com/print?${successParam}ver=1&data-type=eposprintxml&reselect=yes&data=${encodedXML}`;
+        // Epson公式サンプル同様、success に https の戻り先を渡す（shortcuts:// は開けない）
+        const printURL =
+            'tmprintassistant://tmprintassistant.epson.com/print?' +
+            'success=' + encodeURIComponent(returnUrl) + '&' +
+            'ver=1&data-type=eposprintxml&reselect=yes&data=' + encodedXML;
         console.log('完全なURLスキーム長:', printURL.length);
+        console.log('戻り先:', returnUrl);
 
         if (printURL.length > 1200000) {
             throw new Error('印刷データが大きすぎます。型番を短くして再度お試しください');
         }
 
-        showMessage('TM Print Assistantを起動します...', 'success');
-
-        setTimeout(function() {
-            const link = document.createElement('a');
-            link.href = printURL;
-            link.style.display = 'none';
-            document.body.appendChild(link);
-            link.click();
-            document.body.removeChild(link);
-            showMessage('TM Print Assistantアプリに印刷データを送信しました', 'success');
-        }, 500);
-
         saveToHistory(serialNumber, modelNumber, category, operation, purchasePrice, batteryCost, beltCost, desiredPrice);
-
         const advanced = finishPrintSerial(serialNumber);
         updatePreview();
+        showMessage('TM Print Assistantを起動します...' + serialUpdatePhrase(advanced), 'success');
 
-        showMessage('印刷データを送信しました。' + serialUpdatePhrase(advanced), 'success');
+        // 公式サンプルと同じく location 遷移（戻り先の受け渡しが安定する）
+        setTimeout(function() {
+            window.location.href = printURL;
+        }, 300);
 
     } catch (error) {
         console.error('=== TM Print Assistant印刷エラー ===', error);
@@ -939,31 +944,26 @@ async function printWithTMAssistant(serialNumber, modelNumber, category, operati
         const base64XML = btoa(unescape(encodeURIComponent(xml)));
         console.log('Base64エンコード完了 / 文字数:', base64XML.length);
 
-        const printURL = `tmassistant://print?data=${encodeURIComponent(base64XML)}`;
+        const returnUrl = getPrintReturnUrl();
+        const printURL =
+            'tmassistant://print?' +
+            'success=' + encodeURIComponent(returnUrl) + '&' +
+            'data=' + encodeURIComponent(base64XML);
         console.log('完全なURLスキーム長:', printURL.length);
+        console.log('戻り先:', returnUrl);
 
         if (printURL.length > 1200000) {
             throw new Error('印刷データが大きすぎます。型番を短くして再度お試しください');
         }
 
-        showMessage('TM Assistantを起動します...', 'success');
-
-        setTimeout(function() {
-            const link = document.createElement('a');
-            link.href = printURL;
-            link.style.display = 'none';
-            document.body.appendChild(link);
-            link.click();
-            document.body.removeChild(link);
-            showMessage('TM Assistantアプリに印刷データを送信しました', 'success');
-        }, 500);
-
         saveToHistory(serialNumber, modelNumber, category, operation, purchasePrice, batteryCost, beltCost, desiredPrice);
-
         const advanced = finishPrintSerial(serialNumber);
         updatePreview();
+        showMessage('TM Assistantを起動します...' + serialUpdatePhrase(advanced), 'success');
 
-        showMessage('印刷データを送信しました。' + serialUpdatePhrase(advanced), 'success');
+        setTimeout(function() {
+            window.location.href = printURL;
+        }, 300);
 
     } catch (error) {
         console.error('=== TM Assistant印刷エラー ===', error);
