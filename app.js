@@ -781,10 +781,8 @@ function isIosDevice() {
            (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
 }
 
-// ホーム画面のWebアプリはhttpsのURLでは開けず、渡してもSafariが別に開いてしまう。
-// インストール済みのWebアプリ本体を起動できるのはwebapp://スキームだけ。
-// ただしホーム画面へ追加した時のURLと1文字でも違うと開けないため、
-// 「/」で終わる形と「index.html」で終わる形の両方を用意しておく
+// ホーム画面Webアプリ起動用（任意）。端末やiOS版によっては「アドレスが無効です」になるため、
+// 印刷後の自動戻りには使わない。ボタンの予備手段としてだけ残す。
 function buildWebAppReturnUrls() {
     const host = window.location.host;
     const path = window.location.pathname;
@@ -796,8 +794,6 @@ function buildWebAppReturnUrls() {
     return { primary: primary, alternate: alternate };
 }
 
-// iOSショートカットの「URLを開く」なら、Safariから塞がれていてもwebapp://を起動できる。
-// そのショートカットを外部から呼ぶための名前（利用者が同じ名前で1つ作成する）
 const RETURN_SHORTCUT_NAME = 'Tstime';
 
 function getShortcutReturnUrl() {
@@ -805,30 +801,14 @@ function getShortcutReturnUrl() {
 }
 
 function getHttpsAppUrl() {
+    // クエリやハッシュを除いた本体URL。印刷後の戻り先として最も確実
     return window.location.origin + window.location.pathname;
 }
 
-// 印刷アプリ（TM Print Assistant等）へ渡す戻り先。
-// iOSの中継アプリは https しか開けないことが多く、shortcuts:// を渡すと戻れない。
-// そのため https の return.html を渡し、そこでショートカット／webapp:// へつなぐ。
-function buildPrintReturnPageUrl(fromTag) {
-    const page = new URL('return.html', window.location.href);
-    const webApps = buildWebAppReturnUrls();
-    page.searchParams.set('to', webApps.primary);
-    page.searchParams.set('alt', webApps.alternate || getHttpsAppUrl());
-    page.searchParams.set('https', getHttpsAppUrl());
-    page.searchParams.set('sc', RETURN_SHORTCUT_NAME);
-    page.searchParams.set('from', fromTag || 'print');
-    return page.toString();
-}
-
+// 印刷アプリへ渡す戻り先。
+// Epson公式サンプル同様 https の本体URLを渡す。
+// webapp:// や未作成の shortcuts:// は iOS で「アドレスが無効です」になる。
 function getPrintReturnUrl() {
-    if (isAndroidDevice()) {
-        return getHttpsAppUrl();
-    }
-    if (isIosDevice()) {
-        return buildPrintReturnPageUrl('print');
-    }
     return getHttpsAppUrl();
 }
 
@@ -837,7 +817,7 @@ function getReturnHintText() {
         return 'AndroidではChromeメニュー「アプリをインストール」または「ホーム画面に追加」で使えます。印刷後は同じアプリへ戻ります。';
     }
     if (isIosDevice()) {
-        return '印刷後は中継ページ経由でアプリへ戻ります。初回はショートカット「Tstime」の作成が必要です。';
+        return '印刷後はアプリのページ（https）へ戻ります。入力内容と連番はそのまま残ります。';
     }
     return '印刷後の戻り方は端末により異なります';
 }
@@ -1299,11 +1279,11 @@ function toXSafariUrl(url) {
 
 function buildNimbotReturnPageUrl(httpsUrl) {
     const page = new URL('return.html', window.location.href);
-    const webApps = buildWebAppReturnUrls();
-    // return.html はショートカット優先。Safari戻りは x-safari-https を alt に渡す
-    page.searchParams.set('to', webApps.primary);
-    page.searchParams.set('alt', toXSafariUrl(httpsUrl || getHttpsAppUrl()));
-    page.searchParams.set('sc', RETURN_SHORTCUT_NAME);
+    const appUrl = httpsUrl || getHttpsAppUrl();
+    // https を主戻り先にする（webapp:// は端末により無効）
+    page.searchParams.set('to', appUrl);
+    page.searchParams.set('https', appUrl);
+    page.searchParams.set('alt', toXSafariUrl(appUrl));
     page.searchParams.set('from', 'nimbot');
     return page.toString();
 }
@@ -1318,8 +1298,7 @@ function showNimbotReturnOverlay(links) {
             '<div class="nimbot-return-card">' +
             '<h2>印字完了</h2>' +
             '<p>元のWebアプリへ戻ります。自動で戻らない場合は下のボタンを押してください。</p>' +
-            '<a class="nimbot-return-btn" id="nimbotReturnSafari" href="#">Safari / アプリに戻る</a>' +
-            '<a class="nimbot-return-btn secondary" id="nimbotReturnShortcut" href="#">ショートカットで戻る</a>' +
+            '<a class="nimbot-return-btn" id="nimbotReturnSafari" href="#">アプリを開く</a>' +
             '<button type="button" class="nimbot-return-btn secondary" id="nimbotReturnClose">閉じる</button>' +
             '</div>';
         document.body.appendChild(overlay);
@@ -1329,9 +1308,7 @@ function showNimbotReturnOverlay(links) {
     }
 
     const safariBtn = document.getElementById('nimbotReturnSafari');
-    const shortcutBtn = document.getElementById('nimbotReturnShortcut');
-    safariBtn.href = links.safari || links.https || '#';
-    shortcutBtn.href = links.shortcut || '#';
+    safariBtn.href = links.https || links.safari || '#';
     overlay.classList.add('is-visible');
 }
 
@@ -1342,16 +1319,15 @@ function returnAfterNimbotBluefyPrint() {
     showMessage('印字完了。元のアプリへ戻ります...', 'success');
     showNimbotReturnOverlay({
         safari: safariUrl,
-        shortcut: getShortcutReturnUrl(),
         https: httpsUrl
     });
 
-    // 自動戻りは1回だけ（ポップアップが増えないよう二重遷移しない）
+    // https / x-safari-https のみ自動遷移（webapp:// は使わない）
     setTimeout(function() {
         try {
-            window.location.href = safariUrl;
+            window.location.href = safariUrl || httpsUrl;
         } catch (e) {
-            console.warn('Safari戻り失敗', e);
+            console.warn('戻り失敗', e);
         }
     }, 500);
 }

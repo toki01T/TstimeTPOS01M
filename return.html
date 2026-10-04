@@ -67,35 +67,6 @@
             color: #64748b;
         }
 
-        details {
-            margin-top: 16px;
-            text-align: left;
-        }
-
-        summary {
-            cursor: pointer;
-            font-size: 0.85rem;
-            font-weight: 700;
-            color: #2563eb;
-        }
-
-        details ol {
-            margin: 12px 0 0;
-            padding-left: 1.2em;
-            color: #475569;
-            font-size: 0.82rem;
-            line-height: 1.8;
-        }
-
-        code {
-            font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-            font-size: 0.78rem;
-            background: #f1f5f9;
-            padding: 1px 5px;
-            border-radius: 5px;
-            word-break: break-all;
-        }
-
         .target {
             margin: 16px 0 0;
             padding-top: 12px;
@@ -109,24 +80,13 @@
 </head>
 <body>
     <div class="card">
-        <h1>印刷が完了しました</h1>
-        <p id="status">ショートカットを開いています…</p>
+        <h1 id="title">印刷が完了しました</h1>
+        <p id="status">アプリへ戻しています…</p>
 
-        <a class="button" id="viaShortcut" href="#">ショートカットで戻る</a>
-        <a class="button secondary" id="retry" href="#">直接アプリに戻る</a>
-        <a class="button secondary" id="retryAlt" href="#">別の形式で戻る</a>
+        <a class="button" id="openApp" href="#">アプリを開く</a>
+        <a class="button secondary" id="openSafari" href="#" style="display:none">Safariで開く</a>
 
-        <p class="hint">自動で戻れない場合は上のボタンを押してください。ホーム画面の「T's time」から開き直しても、入力内容と連番は残っています。</p>
-
-        <details>
-            <summary>初回だけ：ショートカットの作り方</summary>
-            <ol>
-                <li>「ショートカット」アプリを開き、右上の＋で新規作成</li>
-                <li>「アクションを追加」→「URL」を選び、下のアドレスを貼り付け<br><code id="webappUrl"></code></li>
-                <li>続けて「URLを開く」アクションを追加</li>
-                <li>右上からショートカット名を <code id="scName"></code> に設定して完了</li>
-            </ol>
-        </details>
+        <p class="hint">自動で戻れない場合は「アプリを開く」を押してください。入力内容と連番はそのまま残っています。</p>
 
         <p class="target" id="target"></p>
     </div>
@@ -134,14 +94,10 @@
     <script>
         (function () {
             var params = new URLSearchParams(window.location.search);
-            var target = params.get('to') || 'webapp://toki01t.github.io/TstimeTPOS01M/';
-            var alternate = params.get('alt') || '';
             var httpsApp = params.get('https') || '';
-            var shortcutName = params.get('sc') || 'Tstime';
+            var to = params.get('to') || '';
+            var alternate = params.get('alt') || '';
             var from = params.get('from') || '';
-            var fromNimbot = from === 'nimbot';
-            var fromPrint = from === 'print';
-            var shortcutUrl = 'shortcuts://run-shortcut?name=' + encodeURIComponent(shortcutName);
 
             function toXSafari(url) {
                 if (!url) return '';
@@ -150,76 +106,38 @@
                 return url;
             }
 
-            // Bluefy内のhttpsはBluefyに残るので、Safari戻りは x-safari-https を優先
-            var safariTarget = '';
-            if (/^x-safari-/i.test(alternate)) {
-                safariTarget = alternate;
-            } else if (/^https?:\/\//i.test(alternate)) {
-                safariTarget = toXSafari(alternate);
-            } else if (/^https?:\/\//i.test(httpsApp)) {
-                safariTarget = toXSafari(httpsApp);
-            } else if (/^https?:\/\//i.test(target)) {
-                safariTarget = toXSafari(target);
+            // 自動遷移・主ボタンは必ず https のみ（webapp:// は「アドレスが無効です」になる端末がある）
+            var appUrl = '';
+            if (/^https?:\/\//i.test(httpsApp)) appUrl = httpsApp;
+            else if (/^https?:\/\//i.test(to)) appUrl = to;
+            else if (/^https?:\/\//i.test(alternate)) appUrl = alternate;
+            else appUrl = 'https://toki01t.github.io/TstimeTPOS01M/';
+
+            var safariUrl = '';
+            if (/^x-safari-/i.test(alternate)) safariUrl = alternate;
+            else if (from === 'nimbot') safariUrl = toXSafari(appUrl);
+
+            var openApp = document.getElementById('openApp');
+            var openSafari = document.getElementById('openSafari');
+            openApp.href = appUrl;
+            document.getElementById('target').textContent = appUrl;
+
+            if (safariUrl && safariUrl !== appUrl) {
+                openSafari.style.display = 'block';
+                openSafari.href = safariUrl;
             }
 
-            var retry = document.getElementById('retry');
-            var retryAlt = document.getElementById('retryAlt');
-            var viaShortcut = document.getElementById('viaShortcut');
-
-            // 主ボタン: ホーム画面アプリ(webapp://) / Safari戻り
-            retry.href = target || safariTarget || '#';
-            retry.textContent = /^webapp:/i.test(target) ? '直接アプリに戻る' : (safariTarget ? 'Safariに戻る' : '直接アプリに戻る');
-
-            var altHref = '';
-            if (safariTarget && safariTarget !== retry.getAttribute('href')) {
-                altHref = safariTarget;
-            } else if (alternate && alternate !== retry.getAttribute('href')) {
-                altHref = alternate;
-            } else if (httpsApp && httpsApp !== retry.getAttribute('href')) {
-                altHref = httpsApp;
-            }
-            retryAlt.href = altHref || '#';
-            if (!altHref) {
-                retryAlt.style.display = 'none';
-            } else {
-                retryAlt.textContent = /^x-safari-/i.test(altHref) || /^https?:/i.test(altHref)
-                    ? 'Safariで開く'
-                    : '別の形式で戻る';
+            if (from === 'nimbot') {
+                document.getElementById('title').textContent = 'NIMBOT印字が完了しました';
             }
 
-            viaShortcut.href = shortcutUrl;
-            document.getElementById('scName').textContent = shortcutName;
-            document.getElementById('webappUrl').textContent = target;
-            document.getElementById('target').textContent = shortcutUrl;
-
-            if (fromNimbot) {
-                document.querySelector('h1').textContent = 'NIMBOT印字が完了しました';
-                document.getElementById('status').textContent = '元のアプリへ戻しています…';
-            } else if (fromPrint) {
-                document.querySelector('h1').textContent = '印刷が完了しました';
-                document.getElementById('status').textContent = 'Webアプリへ戻しています…';
-            }
-
-            // Bluefy: Safari を先に試し、続けてショートカット
-            // 印刷アプリ戻り: ショートカット → webapp:// の順でホーム画面アプリを開く
-            if (fromNimbot && safariTarget) {
-                window.location.replace(safariTarget);
-                setTimeout(function () {
-                    window.location.href = shortcutUrl;
-                }, 1200);
-            } else {
-                window.location.replace(shortcutUrl);
-                setTimeout(function () {
-                    if (/^webapp:/i.test(target)) {
-                        window.location.href = target;
-                    }
-                }, 1400);
-            }
+            // https へ確実に戻す。webapp:// や shortcuts:// は自動では開かない
+            window.location.replace(appUrl);
 
             setTimeout(function () {
                 document.getElementById('status').textContent =
-                    '自動で開けませんでした。下のボタンからお戻りください。';
-            }, 2200);
+                    '自動で戻れない場合は「アプリを開く」を押してください。';
+            }, 1600);
         })();
     </script>
 </body>
