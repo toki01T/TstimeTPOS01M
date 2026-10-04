@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-    <title>T's time - アプリに戻る</title>
+    <title>T's time - Webアプリに戻る</title>
     <style>
         body {
             margin: 0;
@@ -67,6 +67,35 @@
             color: #64748b;
         }
 
+        details {
+            margin-top: 16px;
+            text-align: left;
+        }
+
+        summary {
+            cursor: pointer;
+            font-size: 0.85rem;
+            font-weight: 700;
+            color: #2563eb;
+        }
+
+        details ol {
+            margin: 12px 0 0;
+            padding-left: 1.2em;
+            color: #475569;
+            font-size: 0.82rem;
+            line-height: 1.8;
+        }
+
+        code {
+            font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+            font-size: 0.78rem;
+            background: #f1f5f9;
+            padding: 1px 5px;
+            border-radius: 5px;
+            word-break: break-all;
+        }
+
         .target {
             margin: 16px 0 0;
             padding-top: 12px;
@@ -81,12 +110,23 @@
 <body>
     <div class="card">
         <h1 id="title">印刷が完了しました</h1>
-        <p id="status">アプリへ戻しています…</p>
+        <p id="status">ホーム画面のWebアプリへ戻しています…</p>
 
-        <a class="button" id="openApp" href="#">アプリを開く</a>
-        <a class="button secondary" id="openSafari" href="#" style="display:none">Safariで開く</a>
+        <a class="button" id="openWebApp" href="#">Webアプリに戻る</a>
+        <a class="button secondary" id="openShortcut" href="#">ショートカットで戻る</a>
+        <a class="button secondary" id="openHomeHint" href="#">ホーム画面のアイコンから開く</a>
 
-        <p class="hint">自動で戻れない場合は「アプリを開く」を押してください。入力内容と連番はそのまま残っています。</p>
+        <p class="hint">Safariのサイトではなく、ホーム画面の「T's time」Webアプリへ戻ります。入力・連番はそのまま残っています。</p>
+
+        <details>
+            <summary>初回だけ：ショートカットの作り方</summary>
+            <ol>
+                <li>「ショートカット」アプリで新規作成</li>
+                <li>「URL」に次を貼り付け<br><code id="webappUrl"></code></li>
+                <li>「URLを開く」を追加</li>
+                <li>名前を <code id="scName"></code> にして保存</li>
+            </ol>
+        </details>
 
         <p class="target" id="target"></p>
     </div>
@@ -94,50 +134,71 @@
     <script>
         (function () {
             var params = new URLSearchParams(window.location.search);
+            var webappPrimary = params.get('to') || '';
+            var webappAlt = params.get('alt') || '';
             var httpsApp = params.get('https') || '';
-            var to = params.get('to') || '';
-            var alternate = params.get('alt') || '';
+            var shortcutName = params.get('sc') || 'Tstime';
             var from = params.get('from') || '';
+            var shortcutUrl = 'shortcuts://run-shortcut?name=' + encodeURIComponent(shortcutName);
 
-            function toXSafari(url) {
-                if (!url) return '';
-                if (/^https:\/\//i.test(url)) return 'x-safari-' + url;
-                if (/^http:\/\//i.test(url)) return 'x-safari-' + url;
-                return url;
+            // manifest start_url に合わせた既定値
+            if (!/^webapp:/i.test(webappPrimary)) {
+                webappPrimary = 'webapp://toki01t.github.io/TstimeTPOS01M/index.html';
+            }
+            if (!/^webapp:/i.test(webappAlt)) {
+                webappAlt = 'webapp://toki01t.github.io/TstimeTPOS01M/';
             }
 
-            // 自動遷移・主ボタンは必ず https のみ（webapp:// は「アドレスが無効です」になる端末がある）
-            var appUrl = '';
-            if (/^https?:\/\//i.test(httpsApp)) appUrl = httpsApp;
-            else if (/^https?:\/\//i.test(to)) appUrl = to;
-            else if (/^https?:\/\//i.test(alternate)) appUrl = alternate;
-            else appUrl = 'https://toki01t.github.io/TstimeTPOS01M/';
+            var openWebApp = document.getElementById('openWebApp');
+            var openShortcut = document.getElementById('openShortcut');
+            var openHomeHint = document.getElementById('openHomeHint');
 
-            var safariUrl = '';
-            if (/^x-safari-/i.test(alternate)) safariUrl = alternate;
-            else if (from === 'nimbot') safariUrl = toXSafari(appUrl);
+            openWebApp.href = webappPrimary;
+            openShortcut.href = shortcutUrl;
+            // ホーム画面アイコン案内。誤ってサイトへ飛ばさないよう javascript:void にする
+            openHomeHint.href = '#';
+            openHomeHint.addEventListener('click', function (e) {
+                e.preventDefault();
+                document.getElementById('status').textContent =
+                    'ホーム画面の「T\'s time」アイコンをタップしてください。';
+            });
 
-            var openApp = document.getElementById('openApp');
-            var openSafari = document.getElementById('openSafari');
-            openApp.href = appUrl;
-            document.getElementById('target').textContent = appUrl;
-
-            if (safariUrl && safariUrl !== appUrl) {
-                openSafari.style.display = 'block';
-                openSafari.href = safariUrl;
-            }
+            document.getElementById('webappUrl').textContent = webappPrimary;
+            document.getElementById('scName').textContent = shortcutName;
+            document.getElementById('target').textContent = webappPrimary;
 
             if (from === 'nimbot') {
                 document.getElementById('title').textContent = 'NIMBOT印字が完了しました';
             }
 
-            // https へ確実に戻す。webapp:// や shortcuts:// は自動では開かない
-            window.location.replace(appUrl);
+            function tryOpenWebApp() {
+                // 先に iframe で試し、だめなら同じタブで開く
+                try {
+                    var iframe = document.createElement('iframe');
+                    iframe.style.display = 'none';
+                    iframe.src = webappPrimary;
+                    document.body.appendChild(iframe);
+                    setTimeout(function () {
+                        try { document.body.removeChild(iframe); } catch (e) {}
+                    }, 800);
+                } catch (e) {}
+
+                setTimeout(function () {
+                    window.location.href = webappPrimary;
+                }, 200);
+            }
+
+            // サイト(https)へは自動で飛ばさない。Webアプリ(webapp://)へ戻す
+            // 1) ショートカット（作成済みならホーム画面アプリが開く）
+            // 2) webapp://…/index.html（manifest の start_url に一致）
+            // ※ / 終わりの別パスは「アドレスが無効」になりやすいので自動では試さない
+            window.location.href = shortcutUrl;
+            setTimeout(tryOpenWebApp, 900);
 
             setTimeout(function () {
                 document.getElementById('status').textContent =
-                    '自動で戻れない場合は「アプリを開く」を押してください。';
-            }, 1600);
+                    '自動で戻れない場合は「Webアプリに戻る」を押すか、ホーム画面のアイコンをタップしてください。';
+            }, 2400);
         })();
     </script>
 </body>

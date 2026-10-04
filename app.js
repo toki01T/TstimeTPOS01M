@@ -781,17 +781,22 @@ function isIosDevice() {
            (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
 }
 
-// ホーム画面Webアプリ起動用（任意）。端末やiOS版によっては「アドレスが無効です」になるため、
-// 印刷後の自動戻りには使わない。ボタンの予備手段としてだけ残す。
+// ホーム画面Webアプリ起動用。
+// manifest の start_url は ./index.html なので、webapp:// も index.html 付きを優先する。
+// （パスが1文字でも違うと iOS で「アドレスが無効です」になる）
 function buildWebAppReturnUrls() {
     const host = window.location.host;
-    const path = window.location.pathname;
-    const primary = 'webapp://' + host + path;
-    const alternate = path.endsWith('/')
-        ? 'webapp://' + host + path + 'index.html'
-        : 'webapp://' + host + path.replace(/[^/]*$/, '');
+    let dir = window.location.pathname || '/';
+    if (/index\.html$/i.test(dir)) {
+        dir = dir.replace(/index\.html$/i, '');
+    } else if (!dir.endsWith('/')) {
+        dir = dir.replace(/[^/]*$/, '');
+    }
+    if (!dir.endsWith('/')) dir += '/';
 
-    return { primary: primary, alternate: alternate };
+    const withIndex = 'webapp://' + host + dir + 'index.html';
+    const withSlash = 'webapp://' + host + dir;
+    return { primary: withIndex, alternate: withSlash, dir: dir };
 }
 
 const RETURN_SHORTCUT_NAME = 'Tstime';
@@ -801,14 +806,35 @@ function getShortcutReturnUrl() {
 }
 
 function getHttpsAppUrl() {
-    // クエリやハッシュを除いた本体URL。印刷後の戻り先として最も確実
-    return window.location.origin + window.location.pathname;
+    const urls = buildWebAppReturnUrls();
+    // サイトではなくアプリ本体。manifest の start_url に合わせて index.html を付ける
+    return window.location.origin + urls.dir + 'index.html';
 }
 
 // 印刷アプリへ渡す戻り先。
-// Epson公式サンプル同様 https の本体URLを渡す。
-// webapp:// や未作成の shortcuts:// は iOS で「アドレスが無効です」になる。
+// iOS: Print Assist は https しか開けないので中継ページへ渡し、そこで Webアプリ(webapp://)へ戻す。
+// Android: https のまま PWA に戻れる。
+function buildPrintReturnPageUrl(fromTag) {
+    const page = new URL('return.html', window.location.href);
+    const webApps = buildWebAppReturnUrls();
+    page.searchParams.set('to', webApps.primary);
+    page.searchParams.set('alt', webApps.alternate);
+    page.searchParams.set('https', getHttpsAppUrl());
+    page.searchParams.set('sc', RETURN_SHORTCUT_NAME);
+    page.searchParams.set('from', fromTag || 'print');
+    if (isStandaloneWebApp()) {
+        page.searchParams.set('standalone', '1');
+    }
+    return page.toString();
+}
+
 function getPrintReturnUrl() {
+    if (isAndroidDevice()) {
+        return getHttpsAppUrl();
+    }
+    if (isIosDevice()) {
+        return buildPrintReturnPageUrl('print');
+    }
     return getHttpsAppUrl();
 }
 
@@ -817,7 +843,7 @@ function getReturnHintText() {
         return 'AndroidではChromeメニュー「アプリをインストール」または「ホーム画面に追加」で使えます。印刷後は同じアプリへ戻ります。';
     }
     if (isIosDevice()) {
-        return '印刷後はアプリのページ（https）へ戻ります。入力内容と連番はそのまま残ります。';
+        return '印刷後はホーム画面のWebアプリへ戻ります。初回はショートカット「Tstime」の作成が必要な場合があります。';
     }
     return '印刷後の戻り方は端末により異なります';
 }
@@ -1279,11 +1305,13 @@ function toXSafariUrl(url) {
 
 function buildNimbotReturnPageUrl(httpsUrl) {
     const page = new URL('return.html', window.location.href);
+    const webApps = buildWebAppReturnUrls();
     const appUrl = httpsUrl || getHttpsAppUrl();
-    // https を主戻り先にする（webapp:// は端末により無効）
-    page.searchParams.set('to', appUrl);
+    // Webアプリへ戻す（index.html 付き webapp://）
+    page.searchParams.set('to', webApps.primary);
+    page.searchParams.set('alt', webApps.alternate);
     page.searchParams.set('https', appUrl);
-    page.searchParams.set('alt', toXSafariUrl(appUrl));
+    page.searchParams.set('sc', RETURN_SHORTCUT_NAME);
     page.searchParams.set('from', 'nimbot');
     return page.toString();
 }
