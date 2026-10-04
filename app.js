@@ -2487,9 +2487,11 @@ function canvasToEposMonoRaster(canvas, inkThreshold) {
 // Epson 58mm（TM-m30III 等）の印字幅。MP-B20の内容幅384ドットを中央に置く
 const TM_58MM_PRINT_WIDTH_PX = 420;
 const TM_CONTENT_WIDTH_PX = 384; // MP-B20と同じ印字内容幅
-// ヘッド〜カッター間隔（TM-m30系 約9.5mm）。この分を画像下余白にし no_feed で切ると次票の上部が短くなる
+// ヘッド〜カッター間隔（TM-m30系 約9.5mm）。no_feed 時はこの分がカット位置に使われる
 const TM_HEAD_TO_CUTTER_PX = 76;
-// 上部をさらに約2mm詰める（次票の印字開始位置を寄せる）
+// カット後に紙へ残る下部余白（ヘッド分だけのとき下部が短くなりすぎる）
+const TM_VISIBLE_BOTTOM_PX = 24; // 約3mm
+// 上部を約2mm詰める
 const TM_TOP_TRIM_PX = 16;
 
 // 内容キャンバスをプリンター印字幅の中央へ配置（左寄り防止）
@@ -2510,7 +2512,7 @@ function centerCanvasOnPrintWidth(sourceCanvas, printWidthPx) {
     return out;
 }
 
-// 上端の白行だけを最大 maxTrimPx まで切り詰める（文字は切らない）
+// 上端のほぼ白い行を最大 maxTrimPx まで切り詰める（文字本体は切らない）
 function trimLeadingWhiteRows(canvas, maxTrimPx) {
     const maxTrim = Math.max(0, maxTrimPx | 0);
     if (!maxTrim || !canvas.height) return canvas;
@@ -2519,19 +2521,20 @@ function trimLeadingWhiteRows(canvas, maxTrimPx) {
     const width = canvas.width;
     const height = canvas.height;
     const data = ctx.getImageData(0, 0, width, Math.min(height, maxTrim)).data;
+    const inkLimit = Math.max(1, Math.floor(width * 0.004)); // ごく薄いノイズは白行扱い
     let trim = 0;
 
     for (let y = 0; y < maxTrim && y < height; y++) {
-        let hasInk = false;
+        let dark = 0;
         for (let x = 0; x < width; x++) {
             const i = (y * width + x) * 4;
             const lum = data[i] * 0.299 + data[i + 1] * 0.587 + data[i + 2] * 0.114;
             if (data[i + 3] > 32 && lum < 200) {
-                hasInk = true;
-                break;
+                dark += 1;
+                if (dark > inkLimit) break;
             }
         }
-        if (hasInk) break;
+        if (dark > inkLimit) break;
         trim += 1;
     }
 
@@ -2600,11 +2603,11 @@ async function buildTmRasterPrintXml(serialNumber, modelNumber, category, operat
         purchasePrice, batteryCost, beltCost, desiredPrice
     );
     // 内容はMP-B20と同じ384幅を420幅へ中央配置。
-    // 上部は白行トリム＋ no_feed カットで約2mm詰め、下余白はヘッド〜カッター分だけにする。
+    // 上部は約2mm詰め、下部はカット位置＋見える余白（縮めすぎ防止）を確保する。
     // 画像は1枚送信。掠れ防止のため描画倍率はMP-B20と同じ3、二値化もやや濃いめ。
     const contentCanvas = await renderThermalLabelCanvas(labelData, {
         paddingTop: 0,
-        paddingBottom: TM_HEAD_TO_CUTTER_PX,
+        paddingBottom: TM_HEAD_TO_CUTTER_PX + TM_VISIBLE_BOTTOM_PX,
         supersample: 3,
         inkThreshold: 155
     });
