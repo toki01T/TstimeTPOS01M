@@ -2491,8 +2491,8 @@ const TM_CONTENT_WIDTH_PX = 384; // MP-B20と同じ印字内容幅
 const TM_HEAD_TO_CUTTER_PX = 76;
 // カット後に紙へ残る下部余白（ヘッド分だけのとき下部が短くなりすぎる）
 const TM_VISIBLE_BOTTOM_PX = 24; // 約3mm
-// 上部を約2mm詰める
-const TM_TOP_TRIM_PX = 16;
+// 印字内容を上へ約2mm移動（203dpiで16ドット）
+const TM_TOP_SHIFT_PX = 16;
 
 // 内容キャンバスをプリンター印字幅の中央へ配置（左寄り防止）
 function centerCanvasOnPrintWidth(sourceCanvas, printWidthPx) {
@@ -2553,6 +2553,22 @@ function trimLeadingWhiteRows(canvas, maxTrimPx) {
     return out;
 }
 
+// 内容を上へずらす（上端 shiftPx は切り捨て、高さは維持して下側が白くなる）
+function shiftCanvasUp(canvas, shiftPx) {
+    const shift = Math.max(0, shiftPx | 0);
+    if (!shift || shift >= canvas.height) return canvas;
+
+    const out = document.createElement('canvas');
+    out.width = canvas.width;
+    out.height = canvas.height;
+    const ctx = out.getContext('2d');
+    ctx.fillStyle = '#ffffff';
+    ctx.fillRect(0, 0, out.width, out.height);
+    ctx.imageSmoothingEnabled = false;
+    ctx.drawImage(canvas, 0, -shift);
+    return out;
+}
+
 // TM Print Assistant / TM Assistant向け：綺麗なBIZ UD字形を画像として送る。
 // TM-m30IIIは一度に大きな画像を受けられるので、分割を減らして転送を速くする。
 function buildEposRasterPrintXml(raster, options) {
@@ -2603,7 +2619,7 @@ async function buildTmRasterPrintXml(serialNumber, modelNumber, category, operat
         purchasePrice, batteryCost, beltCost, desiredPrice
     );
     // 内容はMP-B20と同じ384幅を420幅へ中央配置。
-    // 上部は約2mm詰め、下部はカット位置＋見える余白（縮めすぎ防止）を確保する。
+    // 印字を上部へ約2mm上げ、下部はカット位置＋見える余白を確保する。
     // 画像は1枚送信。掠れ防止のため描画倍率はMP-B20と同じ3、二値化もやや濃いめ。
     const contentCanvas = await renderThermalLabelCanvas(labelData, {
         paddingTop: 0,
@@ -2614,8 +2630,12 @@ async function buildTmRasterPrintXml(serialNumber, modelNumber, category, operat
     if (contentCanvas.width !== TM_CONTENT_WIDTH_PX) {
         console.warn('TM内容幅が想定外です:', contentCanvas.width);
     }
-    const trimmed = trimLeadingWhiteRows(contentCanvas, TM_TOP_TRIM_PX);
-    const canvas = centerCanvasOnPrintWidth(trimmed, TM_58MM_PRINT_WIDTH_PX);
+    // 白行を優先して詰め、足りない分だけ内容を上へずらして合計約2mm上げる
+    const trimmed = trimLeadingWhiteRows(contentCanvas, TM_TOP_SHIFT_PX);
+    const alreadyTrimmed = contentCanvas.height - trimmed.height;
+    const remainShift = Math.max(0, TM_TOP_SHIFT_PX - alreadyTrimmed);
+    const raised = shiftCanvasUp(trimmed, remainShift);
+    const canvas = centerCanvasOnPrintWidth(raised, TM_58MM_PRINT_WIDTH_PX);
     const raster = canvasToEposMonoRaster(canvas, 175);
     const xml = buildEposRasterPrintXml(raster, {
         bandHeight: raster.height,
