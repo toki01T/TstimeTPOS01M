@@ -17,7 +17,7 @@
     <link rel="icon" type="image/png" sizes="192x192" href="icons/icon-192.png">
     <link rel="icon" type="image/png" sizes="512x512" href="icons/icon-512.png">
     <!-- 更新が端末のキャッシュに阻まれないよう、修正のたびにこの番号を上げる -->
-    <link rel="stylesheet" href="style.css?v=20261004i">
+    <link rel="stylesheet" href="style.css?v=20261005a">
 </head>
 <body>
     <div class="container">
@@ -224,22 +224,22 @@
                     <div class="price-grid">
                         <div class="form-group">
                             <label for="purchasePrice">購入価格</label>
-                            <input type="number" id="purchasePrice" inputmode="numeric" placeholder="例: 5000">
+                            <input type="text" id="purchasePrice" inputmode="numeric" pattern="[0-9]*" autocomplete="off" enterkeyhint="done" placeholder="例: 5000">
                         </div>
 
                         <div class="form-group">
                             <label for="batteryCost">電池代</label>
-                            <input type="number" id="batteryCost" inputmode="numeric" placeholder="例: 300">
+                            <input type="text" id="batteryCost" inputmode="numeric" pattern="[0-9]*" autocomplete="off" enterkeyhint="done" placeholder="例: 300">
                         </div>
 
                         <div class="form-group">
                             <label for="beltCost">ベルト代</label>
-                            <input type="number" id="beltCost" inputmode="numeric" placeholder="例: 500">
+                            <input type="text" id="beltCost" inputmode="numeric" pattern="[0-9]*" autocomplete="off" enterkeyhint="done" placeholder="例: 500">
                         </div>
 
                         <div class="form-group price-accent">
                             <label for="desiredPrice">金額</label>
-                            <input type="number" id="desiredPrice" inputmode="numeric" placeholder="例: 8000">
+                            <input type="text" id="desiredPrice" inputmode="numeric" pattern="[0-9]*" autocomplete="off" enterkeyhint="done" placeholder="例: 8000">
                         </div>
                     </div>
                 </div>
@@ -274,7 +274,7 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.11.6/dist/JsBarcode.all.min.js"></script>
     <script src="epos-2.27.0.js" onerror="console.warn('ePOS SDK not loaded')"></script>
-    <script src="niimbot.js?v=20261004i"></script>
-    <script src="app.js?v=20261004i"></script>
+    <script src="niimbot.js?v=20261005a"></script>
+    <script src="app.js?v=20261005a"></script>
 </body>
 </html>

@@ -431,10 +431,57 @@ document.addEventListener('DOMContentLoaded', function() {
         autoGrowTextarea(modelNumberField);
     });
 
-    document.getElementById('purchasePrice').addEventListener('input', updatePreview);
-    document.getElementById('batteryCost').addEventListener('input', updatePreview);
-    document.getElementById('beltCost').addEventListener('input', updatePreview);
-    document.getElementById('desiredPrice').addEventListener('input', updatePreview);
+    // 金額欄: iOS の type=number はフォーカスが残りやすく、型番へ移っても
+    // 入力が金額欄へ入ることがある。text + inputmode=numeric にし、型番タップで blur する。
+    const priceFieldIds = ['purchasePrice', 'batteryCost', 'beltCost', 'desiredPrice'];
+
+    function blurPriceFields() {
+        priceFieldIds.forEach(function(id) {
+            const el = document.getElementById(id);
+            if (el && document.activeElement === el) {
+                el.blur();
+            }
+        });
+    }
+
+    function bindNumericPriceField(el) {
+        if (!el) return;
+        el.addEventListener('input', function() {
+            const cleaned = String(this.value || '').replace(/[^\d]/g, '');
+            if (this.value !== cleaned) {
+                this.value = cleaned;
+            }
+            updatePreview();
+        });
+        // 完了後に次へ進みやすくする
+        el.addEventListener('keydown', function(e) {
+            if (e.key === 'Enter') {
+                e.preventDefault();
+                this.blur();
+            }
+        });
+    }
+
+    priceFieldIds.forEach(function(id) {
+        bindNumericPriceField(document.getElementById(id));
+    });
+
+    // 型番へ移る操作で金額欄のフォーカスを確実に外す
+    ['touchstart', 'mousedown'].forEach(function(evtName) {
+        modelNumberField.addEventListener(evtName, function() {
+            blurPriceFields();
+        }, { passive: true });
+    });
+    modelNumberField.addEventListener('focus', function() {
+        blurPriceFields();
+        const self = this;
+        // iOS が数値欄へフォーカスを戻す場合があるので、1フレーム後に奪い返す
+        requestAnimationFrame(function() {
+            if (document.activeElement !== self) {
+                self.focus({ preventScroll: true });
+            }
+        });
+    });
     
     // ボタンイベント
     document.getElementById('printBtn').addEventListener('click', printLabel);
